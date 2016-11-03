@@ -32,7 +32,7 @@ vec3 makeBloom(float lod,vec2 offset){
 			for (int j = -7; j < 7; j++) {
 			vec2 bcoord = (texcoord.xy-offset+vec2(i,j)*pw*vec2(1.0,aspectRatio))*scale;
 
-			float wg = pow((1.0-length(vec2(i,j))/8.0),3)*pow(01.3,01.3)*20.0;
+			float wg = pow((1.0-length(vec2(i,j))/8.0),3)*pow(0.5,0.5)*20.0;
 
 			if (wg > 0) bloom +=(pow(texture2D(gcolor,bcoord).rgb,vec3(2.2))*wg);
 			}

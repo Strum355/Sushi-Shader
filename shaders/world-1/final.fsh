@@ -1,4 +1,7 @@
 #version 120
+#extension GL_ARB_shader_texture_lod : enable
+
+#define MAX_COLOR_RANGE 48.0 //[1.0 2.0 4.0 6.0 12.0 24.0 48.0 96.0]
 
 //disabling is done by adding "//" to the beginning of a line.
 
@@ -7,10 +10,6 @@
 //***************************ADJUSTABLE VARIABLES***************************//
 
 //***************************VISUALS***************************//
-
-#define VIGNETTE
-	#define VIGNETTE_STRENGTH 1.0
-	#define VIGNETTE_SIZE 0.85
 
 //#define LENS_EFFECTS
 	#define LENS_STRENGTH 0.25
@@ -42,39 +41,12 @@
 #define SATURATION 1.25 //[1.0 1.1 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
 
 
-//#define HIGH_DESATURATION
-	#define HIGH_DESATURATION_BRIGHTNESS 1.0 //[0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0] //The higher the more bright the dark spots will be. Put it higher if you want a brighter night.
-
-
-//#define VINTAGE
-	#define VINTAGE_MULT 1.0 //[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
-
-#define HDR
-	#define HDR_MULT 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0]
-	#define HDR_MAX 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0]
-	#define HDR_MIN 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0 4.5 5.0 5.5 6.0 6.5 7.0 7.5 8.0]
-
-
 #define DYNAMIC_EXPOSURE					//Makes brighter inside and turned off outside
 	#define DYNAMIC_EXPOSURE_AMOUNT 1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	//Strength
 
 //***************************EFFECTS***************************//
 
-//#define TV_SCREEN_EFFECT		//Just for fun. Enable to get like an old screen effect.
-
-
-//#define MOVIE_BORDER
-
-
 #define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
-
-
-//#define POSTERIZE							//Limits the amount of tints in the RGB channels. Looks like 8 bit if you put POSTERIZE_NUM on 8
-	#define POSTERIZE_NUM 8					//Amount of Tints
-
-
-//#define CHROMATIC_ABBORATION				//Not compatible with dof
-	#define ABBORATION_STRENGHT 1.0
 
 #define RAIN_DROP
 
@@ -98,7 +70,10 @@ uniform sampler2D gdepthtex;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D gaux1;
+uniform sampler2D gaux2;
 uniform mat4 gbufferProjection;
+uniform mat4 gbufferProjectionInverse;
+
 uniform float aspectRatio;
 uniform float near;
 uniform float far;
@@ -109,8 +84,6 @@ uniform float frameTimeCounter;
 uniform ivec2 eyeBrightnessSmooth;
 uniform int isEyeInWater;
 uniform int worldTime;
-
-#include "lib/colorRange.glsl"
 
 float pw = 1.0/ viewWidth;
 float timefract = worldTime;
@@ -145,9 +118,20 @@ vec4 getTpos(){
 
 }
 
+float 	ExpToLinearDepth(in float depth)
+{
+	return 2.0f * near * far / (far + near - (2.0f * depth - 1.0f) * (far - near));
+}
+
 vec2 getLightPos(){
 		vec2 pos1 = getTpos().xy/getTpos().z;
 		return pos1*0.5+0.5;
+
+}
+
+float subSurfaceScattering(vec3 vec,vec3 pos, float N) {
+
+return pow(max(dot(vec,normalize(pos))*0.5+0.5,0.0),N)*(N+1)/6.28;
 
 }
 
@@ -352,43 +336,7 @@ vec3 calcExposure(vec3 color) {
          return color.rgb;
 }
 
-vec3 dynamicExposure(vec3 color) {
-		return color.rgb * clamp((-eyeBrightnessSmooth.y+230)/100.0,0.0,1.0)*2.5*(1-TimeMidnight)*(1-rainx)*DYNAMIC_EXPOSURE_AMOUNT;
-}
 
-vec3 getVignette(vec3 color, float size) {
-
-	float dv = distance(Tc.st, vec2(0.5, 0.5));
-
-	dv *= VIGNETTE_STRENGTH;
-
-	dv = size - dv;
-
-	dv = pow(dv, 0.25);
-
-	dv *= 2.3;
-	dv -= 0.9;
-
-	color *= dv;
-
-	return color;
-}
-
-
-vec3 getTvScreen(vec3 color, vec2 pos) {
-
-	vec2 poss = (Tc.st);
-	vec3 posscolor = vec3(1);
-
-	poss *= 500.0;
-	poss -= (1.0* (frameTimeCounter/0.5) / pos.y);
-
-	vec3 getScreen = vec3(sin(cos(poss.y-0.5) * 3.14259)) + normalize(vec3(posscolor))*1.0;
-
-	color += color * getScreen;
-
-	return color;
-}
 
 #ifdef DIRTY_LENS
 float getDirtyLensPattern(vec2 Pos) {
@@ -447,17 +395,6 @@ vec3 alphablend(vec3 c, vec3 ac, float a) {
 }
 
 
-vec3 getPosterize(vec3 color, float numPos) {
-	return floor((color)*numPos)/numPos;
-}
-
-vec3 getBorder(vec3 color) {
-
-	if (Tc.t > 0.9 || Tc.t < 0.1 )
-				color.rgb = color.rgb*0;
-	return color;
-}
-
 vec3 getExposure(vec3 color){
 
 	color *= 2.0;
@@ -465,19 +402,6 @@ vec3 getExposure(vec3 color){
 	return color;
 }
 
-vec3 convertFinalToHDR(vec3 color){
-
-	vec3 MaxExp = color * (2.0 * HDR_MULT * HDR_MAX);
-	vec3 MinExp = color / (1.5 * HDR_MULT * HDR_MIN);
-
-	#ifdef DYNAMIC_EXPOSURE
-		MaxExp.rgb += dynamicExposure(color) * 2.0;
-	#endif
-
-	vec3 getHDR = mix(MinExp,MaxExp,color.rgb);
-
-	return getHDR;
-}
 
 vec3 robobo1221sTonemap(vec3 color){
 
@@ -492,24 +416,6 @@ vec3 robobo1221sTonemap(vec3 color){
 	return cout;
 }
 
-#ifdef CHROMATIC_ABBORATION
-
-vec3 getAbboration(in vec3 col, in vec2 Tc){
-
-	float alpha = distance(Tc.st, vec2(0.5));
-	alpha = pow(alpha, 6.0);
-
-	vec3 color;
-	color.r = texture2D(gcolor,Tc.st + vec2(0.1,0.0)*(alpha/aspectRatio)*ABBORATION_STRENGHT).r;
-	color.g = texture2D(gcolor,Tc.st + vec2(0.0)*(alpha/aspectRatio)*ABBORATION_STRENGHT).g;
-	color.b = texture2D(gcolor,Tc.st + vec2(-0.1,0.0)*(alpha/aspectRatio)*ABBORATION_STRENGHT).b;
-
-	col = color * MAX_COLOR_RANGE;
-
-	return col;
-}
-
-#endif
 
 #ifdef LENS_EFFECTS
 
@@ -737,35 +643,6 @@ vec3 getAbboration(in vec3 col, in vec2 Tc){
 	}
 #endif
 
-vec3 getSaturation(vec3 color, float saturation)
-{
-	saturation -= 1.0;
-	color = mix(color,vec3(dot(color,vec3(1.0/3.0))),vec3(-saturation));
-
-	return color;
-}
-
-#ifdef HIGH_DESATURATION
-vec3 getHighDesaturate(vec3 color)
-{
-	color.b = color.b*0.55 + ((color.r + color.g)/2.5)*0.4;
-	color = max(((color*1.1) - 0.06 / HIGH_DESATURATION_BRIGHTNESS), 0.0);
-
-	return color;
-}
-#endif
-
-#ifdef VINTAGE
-vec3 getVintage(vec3 color){
-	color.r = color.r*1.05+0.01*VINTAGE_MULT;
-	color.g = color.g*0.98;
-	color.b = color.b*0.8+0.05*VINTAGE_MULT;
-
-	return color;
-}
-
-#endif
-
 #ifdef BLOOM
 
 	vec3 getBloom(in vec2 bCoord){
@@ -786,33 +663,86 @@ vec3 getVintage(vec3 color){
 #endif
 
 
+vec3 nvec3(vec4 pos) {
+    return pos.xyz/pos.w;
+}
+
+vec4 nvec4(vec3 pos) {
+    return vec4(pos.xyz, 1.0);
+}
+
+vec3 getSaturation(vec3 color, float saturation)
+{
+	saturation -= 1.0;
+	color = mix(color,vec3(dot(color,vec3(1.0/3.0))),vec3(-saturation));
+
+	return color;
+}
+
+void TonemapVorontsov(inout vec3 color) {
+	 float tonemapContrast 		= 1.4;
+	 float tonemapSaturation 	= 1.7;
+	 float tonemapDecay			= 21000.0;
+	 float tonemapCurve			= 0.50;
+
+	vec3 colorN = normalize(color.rgb);
+	vec3 clrfr = color.rgb/colorN.rgb;
+	     clrfr = pow(clrfr.rgb, vec3(tonemapContrast));
+	colorN.rgb = pow(colorN.rgb, vec3(tonemapSaturation));
+	color.rgb = clrfr.rgb * colorN.rgb;
+	color.rgb = (color.rgb * (1.0 + color.rgb/tonemapDecay))/(color.rgb + tonemapCurve);
+	color.rgb = pow(color.rgb, vec3(1.0f / 2.2f));
+}
+
 //VOID MAIN//
 
 void main() {
+	float pixeldepth2 = texture2D(depthtex0,texcoord.xy).x;
+
+	vec3 fragpos = vec3(texcoord.st, pixeldepth2);
+	fragpos = nvec3(gbufferProjectionInverse * nvec4(fragpos * 2.0 - 1.0));
+
+	vec2 lightPos = getLightPos();
+
+	float distof = min(min(1.0-lightPos.x,lightPos.x),min(1.0-lightPos.y,lightPos.y));
+	float fading = clamp(1.0-step(distof,0.1)+pow(distof*10.0,5.0),0.0,1.0);
+
+	float sunvisibility = min(texture2D(gcolor,vec2(0.0)).a*2.5,1.0) * (1.0-rainStrength*0.9) * fading;
+
 
 	const float lifetime = 3.0;
 	float ftime = frameTimeCounter*2.0/lifetime;
 	vec4 aux = texture2D(gaux1, texcoord.st);
 	int iswater = int(aux.g > 0.04 && aux.g < 0.07);
 	int isIce = int(aux.g > 0.94 && aux.g < 0.96);
+	float istransparent = float(aux.g > 0.4 && aux.g < 0.42)+isIce;
 
 	vec2 pos = (noisepattern(vec2(-0.94386347*floor(ftime*0.5+0.25),floor(ftime*0.5+0.25)))-0.5)*0.85+0.5;
-vec3 color;
-if(isIce<0.9){
-		 color = texture2D(gcolor,Tc.st).rgb * MAX_COLOR_RANGE;
-}else{
-	vec4 blendWeights = vec4(1.0, 0.5, 0.25, 0.125);
-	float blendWeightsTotal = dot(blendWeights, vec4(1.0));
-	color = texture2DLod(gcolor,Tc.st,2).rgb * MAX_COLOR_RANGE * blendWeights.x;
-	color += texture2DLod(gcolor,Tc.st,3).rgb * MAX_COLOR_RANGE * blendWeights.y;
-	color += texture2DLod(gcolor,Tc.st,4).rgb * MAX_COLOR_RANGE * blendWeights.z;
-	color += texture2DLod(gcolor,Tc.st, 5).rgb * MAX_COLOR_RANGE * blendWeights.w;
-	color /= blendWeightsTotal;
+	float opaqueDepth = ExpToLinearDepth(texture2D(depthtex1, texcoord.st).x);
+	float linearDepth = ExpToLinearDepth(texture2D(gdepthtex, texcoord.st).x);
+	float waterDepth = (opaqueDepth) - linearDepth;
+	float fogDensity = 10.0;
+	float visibility = 1.0f / (pow(exp(waterDepth * fogDensity), 1.0f));
 
+
+vec3 color;
+
+if(isIce>0.9 ){
+		 vec4 blendWeights = vec4(1.0, 0.5, 0.25, 0.125);
+		 blendWeights = pow(blendWeights, vec4(visibility));
+
+		 float blendWeightsTotal = dot(blendWeights, vec4(1.0));
+
+		 color = texture2DLod(gcolor,Tc.st,0).rgb  * blendWeights.x * MAX_COLOR_RANGE;
+		 color += texture2DLod(gcolor,Tc.st,1).rgb  * blendWeights.y * MAX_COLOR_RANGE;
+		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.z * MAX_COLOR_RANGE;
+		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.w * MAX_COLOR_RANGE;
+		 color /= blendWeightsTotal;
+} else {
+	color = texture2D(gcolor,Tc.st).rgb  * MAX_COLOR_RANGE;
 }
-#ifdef CHROMATIC_ABBORATION
-	color = getAbboration(color,Tc.st);
-#endif
+
+
 
 	#ifdef DOF
 		float DoFGamma = 2.2;
@@ -832,15 +762,13 @@ if(isIce<0.9){
 				for ( int i = 0; i < 60; i++) {
 					#ifdef FRINGE_DOF
 
-					sample.r = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio) + vec2(0.5*FRINGE_AMOUNT*pcoc),abs(pcoc * 150.0)).r;
-					sample.g = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio),abs(pcoc * 150.0)).g;
-					sample.b = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio) - vec2(0.5*FRINGE_AMOUNT*pcoc),abs(pcoc * 150.0)).b;
+					sample.r = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio) + vec2(0.5*FRINGE_AMOUNT*pcoc),abs(pcoc * 150.0)).r * MAX_COLOR_RANGE;
+					sample.g = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio),abs(pcoc * 150.0)).g * MAX_COLOR_RANGE;
+					sample.b = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio) - vec2(0.5*FRINGE_AMOUNT*pcoc),abs(pcoc * 150.0)).b * MAX_COLOR_RANGE;
 					#else
-					sample = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio),abs(pcoc * 150.0));
+					sample = texture2D(gcolor, Tc.xy + hex_offsets[i]*pcoc*vec2(1.0,aspectRatio),abs(pcoc * 150.0)) * MAX_COLOR_RANGE;
 
 					#endif
-
-					sample.rgb *= MAX_COLOR_RANGE;
 
 					bcolor += pow(sample.rgb, vec3(DoFGamma));
 				}
@@ -850,71 +778,14 @@ if(isIce<0.9){
 	#endif
 
 	#ifdef BLOOM
-  vec3 blur = vec3(0);
-  vec2 bloomcoord = texcoord.xy;
-
-	vec3 blur1 = pow(texture2D(composite,bloomcoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(2.2))*pow(7.0,0.0);
-	vec3 blur2 = pow(texture2D(composite,bloomcoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(2.2))*pow(6.0,1.0);
-	vec3 blur3 = pow(texture2D(composite,bloomcoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(2.2))*pow(5.0,1.0);
-	vec3 blur4 = pow(texture2D(composite,bloomcoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(2.2))*pow(4.0,1.0);
-	vec3 blur5 = pow(texture2D(composite,bloomcoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(2.2))*pow(3.0,1.0);
-	vec3 blur6 = pow(texture2D(composite,bloomcoord/pow(2.0,7.0) + vec2(0.3,0.3)).rgb,vec3(2.2))*pow(2.0,1.0);
-	blur = blur1 + blur2 + blur3 + blur4 + blur5 + blur6;
-	blur = blur*pow(length(blur),0.4);
-	//blur = pow(texture2D(composite,bloomcoord/2).rgb,vec3(2.2));
-
-  color.rgb = mix(color,blur*MAX_COLOR_RANGE,0.003);
-  //color = blur*MAX_COLOR_RANGE;
-  //color.rgb = blur5;
-  #endif
-
-	#ifdef CALCULATE_EXPOSURE
-		if (isEyeInWater > 0.9)
-			color.rgb = calcExposure(color);
+		color.rgb += getBloom(Tc.st) * 0.03 * B_INTENSITY * MAX_COLOR_RANGE;
 	#endif
 
-	#ifdef LENS_EFFECTS
-		getLensFlare(color);
-	#endif
+	color = getSaturation(color, 1.);
+	TonemapVorontsov(color);
+//	color = robobo1221sTonemap(color);
 
-	#ifdef HIGH_DESATURATION
-		color =	getHighDesaturate(color);
-	#endif
+	vec3 lel = texture2D(composite, texcoord.st/2).rgb*MAX_COLOR_RANGE;
 
-	#ifdef VINTAGE
-		color =	getVintage(color);
-	#endif
-
-	#ifdef VIGNETTE
-		color.rgb = getVignette(color, VIGNETTE_SIZE);
-	#endif
-
-	#ifdef HDR
-		color = convertFinalToHDR(color);
-	#endif
-
-	color = getExposure(color);
-
-
-
-	color = robobo1221sTonemap(color);
-
-	color = getSaturation(color,SATURATION);
-
-	#ifdef TV_SCREEN_EFFECT
-		color = getTvScreen(color, pos.xy);
-	#endif
-
-	#ifdef MOVIE_BORDER
-		color = getBorder(color);
-	#endif
-
-	#ifdef POSTERIZE
-		color = getPosterize(color, POSTERIZE_NUM);
-	#endif
-
-/////////////////////////////////////////////////////////////////////////////////////
-
-	gl_FragColor = vec4(color.rgb, 1.0);
-
+	gl_FragColor = vec4(color, 1.0);
 }

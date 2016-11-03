@@ -26,6 +26,7 @@ varying float mat;
 varying float iswater;
 varying float viewdistance;
 varying float reflectiveObjects;
+varying float isIce;
 varying vec4 verts;
 
 attribute vec4 mc_Entity;
@@ -177,6 +178,8 @@ void main() {
 	viewVector = (gl_ModelViewMatrix * gl_Vertex).xyz;
 	viewVector = normalize(tbnMatrix * viewVector);
 
-	if(mc_Entity.x == 79) mat = 0.95;
-
+	if(mc_Entity.x == 79){
+		mat = 0.95 ;
+		isIce = 1.0;
+	}
 }

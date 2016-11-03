@@ -61,7 +61,7 @@ const bool 		gaux1MipmapEnabled 	= true; //gaux1 texture mipmapping
 //don't touch these lines if you don't know what you do!
 const int maxf = 3;				//number of refinements
 const float stp = 1.0;			//size of one step for raytracing algorithm
-const float ref = 0.1;			//refinement multiplier
+const float ref = 0.9;			//refinement multiplier
 const float inc = 2.0;			//increasement factor at each step
 
 varying vec4 texcoord;
@@ -219,9 +219,9 @@ vec3 renderGaux2(vec3 color, vec2 pos){
 
 	float satValue = saturationValue();
 	float mixAmount = mix(stainedColor.a*satValue, 1.0, float(isIce));
-	vec3 divisionAmount = mix(vec3(1.0),mix(color.rgb, vec3(1.0), TimeMidnight), saturate(isIce+hand));
+	vec3 divisionAmount = mix(vec3(1.0),mix(color.rgb, vec3(1.0), TimeMidnight), saturate(isIce));
 
-	return mix(color,stainedColor.rgb*(color/divisionAmount),saturate(mixAmount*satValue+hand));
+	return mix(color,stainedColor.rgb*(color/divisionAmount),saturate(mixAmount*satValue));
 //return mix(color,stainedColor.rgb * 1.5 * color,clamp(stainedColor.a * 1.25,0.0,1.0));
 
 }
@@ -366,7 +366,7 @@ float refractmask(vec2 coord, float lod){
 			depth.x = getDepth(startPixeldepth);
 			depth.y = getDepth(startPixeldepth2);
 
-			float refractionMult = mix(60.0, 10.0, float(istransparent));
+			float refractionMult = mix(100.0, 5.0, float(istransparent));
 		float refMult = 1.0;
 			refMult = saturate(depth.x - depth.y);
 			refMult /= depth.y;
@@ -417,8 +417,8 @@ vec2 refractionTexcoord(){
 
 vec2 refractionTC = refractionTexcoord();
 
-float pixeldepth = texture2D(depthtex1,refractionTC.xy).x;
-float pixeldepth2 = texture2D(depthtex0,refractionTC.xy).x;
+float pixeldepth = texture2D(depthtex1,refractionTC.xy,0).x;
+float pixeldepth2 = texture2D(depthtex0,refractionTC.xy,0).x;
 
 #ifdef Clouds
 
@@ -781,7 +781,8 @@ vec3 getSkyReflection(vec3 reflectedVector){
 	sclr += sclr * 1.5 *cone12.y * (1.0 - ((rainStrength * 1.6 * (1.0 - TimeMidnight * 0.3 * 1.6)) + TimeMidnight) * 0.75)
 	* (1.0 + (TimeSunrise + TimeSunset) * (1.0 - rainStrength) * 0.5);
 
-	sclr *= 3.0;
+	float skyBrightness = mix(3.0, 0.1, TimeMidnight);
+	sclr *= skyBrightness;
 
 	#ifdef Clouds
 		sclr = drawCloud(reflectedVector.xyz,sclr.rgb,1.0) * (1.0 - isEyeInWater);
@@ -1222,7 +1223,7 @@ void main() {
 
 		normalDotEye = dot(normal, normalize(fragpos));
 
-		float fresnelPow = mix(0.5, 2.0, istransparent);
+		float fresnelPow = mix(2, 5, istransparent);
 		fresnel.z = clamp((1.0 - normalDotEye),0.0,1.0);
 		fresnel.xz = pow(fresnel.xz,vec2(fresnelPow));
 
@@ -1256,7 +1257,7 @@ void main() {
 
 		vec4 reflection;
 
-		vec3 getSky = getSkyReflection(mix(reflectedVector2, reflectedVector, istransparent + iswater))/2;
+		vec3 getSky = getSkyReflection(mix(reflectedVector2, reflectedVector, istransparent + iswater));
 		getSky *= mix(fresnel.z, fresnel.x, istransparent + iswater);
 //	getSky *= fresnel1;
 		float spec = sunSpec(sunVec, fragpos, normal2, 3.0) * (1.0 - TimeMidnight) * (1.0 - isEyeInWater) * (1.0 - rainStrength) * float(pow(sky_lightmap, 50.0) > 0.1) * (istransparent + iswater);
@@ -1268,7 +1269,7 @@ void main() {
 		vec3 forwardRenderingAlbedo = renderGaux2(color, refractionTC);
 		color = forwardRenderingAlbedo;
 
-		vec3 reflColor = mix(color*6, light_col, iswater);
+		vec3 reflColor = mix(color*100, light_col, iswater);
 
 		getSky += ((spec)*stuff.r)*reflColor;
 
@@ -1360,7 +1361,11 @@ void main() {
 
 	}
 
-
+	if(isIce > 0.9){
+		vec3 waterFogColor = vec3(0.1, 0.95, 1.0);
+	 		color.rgb *= waterFogColor;
+		color.rgb += (waterFogColor)*(subSurfaceScattering(lightVector.xyz, fragpos.xyz, 10))*(1-TimeMidnight*0.95);
+	}
 		color.rgb = getColorCorrection(color,land);
 
 	//color = mix(color, vec3(1.0),vec3(clamp(exp(-depth * 5.0),0.0,1.0)) * iswater * pow(getRainPuddles(20.0, frameTimeCounter / 2000.0),1.0));

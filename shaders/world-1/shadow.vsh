@@ -26,7 +26,7 @@
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 
-#define SHADOW_MAP_BIAS 0.8
+#define SHADOW_MAP_BIAS 0.85
 
 const float PI = 3.1415927;
 
@@ -100,12 +100,12 @@ vec4 BiasShadowProjection(in vec4 projectedShadowSpacePosition) {
 	float dist = pow(pow(pos.x, 8.) + pow(pos.y, 8.), 1.0 / 8.0);
 
 	float distortFactor = (1.0 - SHADOW_MAP_BIAS) + dist * SHADOW_MAP_BIAS;
-	
+
 	projectedShadowSpacePosition.xy /= distortFactor*0.97;
-	
+
 	projectedShadowSpacePosition.z /= 2.5;
 
-	
+
 	return projectedShadowSpacePosition;
 }
 
@@ -120,9 +120,9 @@ void main() {
 	vec4 position = ftransform();
 	position = shadowProjectionInverse * position;
 	position = shadowModelViewInverse * position;
-	
+
 	vec2 lmcoord = (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy;
-	
+
 	float dnrsMult = (1.0 + rainStrength * 0.5) * (1.0 - TimeMidnight * 0.5) * 2.0;
 	float underCover = lmcoord.t;
 
@@ -132,12 +132,12 @@ void main() {
 	if (gl_MultiTexCoord0.t < mc_midTexCoord.t) istopv = 1.0;
 
 	underCover = clamp(pow(underCover, 15.0) * 2.0,0.0,1.0);
-	
+
 
 		if ( mc_Entity.x == ENTITY_LEAVES || mc_Entity.x == ENTITY_LEAVES2) {
 				position.xyz += calcMove(worldpos.xyz, 0.0030, 0.0054, 0.0033, 0.0025, 0.0017, 0.0031,vec3(0.75,0.15,0.75+rainx*+1.0 +TimeMidnight*-1.0), vec3(0.375,0.075,0.375))*underCover * dnrsMult;
 				}
-				
+
 		if (mc_Entity.x == ENTITY_NEWFLOWERS ) {
 				position.xyz += calcMove(worldpos.xyz, 0.0030, 0.0054, 0.0033, 0.0025, 0.0017, 0.0031,vec3(0.75,0.15,0.75+rainx*+1.0 +TimeMidnight*-1.0), vec3(0.375,0.075,0.375))*underCover * dnrsMult;
 		}
@@ -181,7 +181,7 @@ void main() {
 				}
 
 		}
-		
+
 	float movemult = 0.0;
 
 	if ( mc_Entity.x == ENTITY_LAVAFLOWING || mc_Entity.x == ENTITY_LAVASTILL ) {
@@ -195,12 +195,12 @@ void main() {
 	position = shadowProjection * position;
 
 	gl_Position = BiasShadowProjection(position);
-	
+
 	isTransparent = 0.0;
-	
+
 	if (mc_Entity.x == 97.0 || mc_Entity.x == 95.0 || mc_Entity.x == 79.0 || mc_Entity.x == 160.0 || mc_Entity.x == 90.0 || mc_Entity.x == 165.0)
 	isTransparent = 1.0;
-	
+
 	if (mc_Entity.x == 8.0 || mc_Entity.x == 9.0)
 	gl_Position *= 0.0;
 

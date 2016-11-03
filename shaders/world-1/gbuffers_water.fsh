@@ -4,16 +4,9 @@
 //////////////////////////////ADJUSTABLE VARIABLES
 //////////////////////////////ADJUSTABLE VARIABLES
 
-#define PARALLAX_WATER //Gives water waves a 3D look
-
-#define WATER_R_MULT 1.0 //[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
-#define WATER_G_MULT 1.0 //[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
-#define WATER_B_MULT 1.0 //[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
-#define WATER_BRIGHTNESS 1.0 //[1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0 13.0 14.0 15.0]
-#define WATER_OPACITY 0.25 //[0.25 0.5 0.75 1.0]
 
 	//#define USE_WATER_TEXTURE
-	vec4 watercolor = vec4(vec3(0.005 * WATER_R_MULT, 0.03 * WATER_G_MULT, 0.05 * WATER_B_MULT) * WATER_BRIGHTNESS, WATER_OPACITY); 	//water color and opacity (r,g,b,opacity)
+	vec4 watercolor = vec4(0.0,0.186,0.275,.2); 	//water color and opacity (r,g,b,opacity)
 
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 //////////////////////////////END OF ADJUSTABLE VARIABLES
@@ -29,6 +22,7 @@ varying vec3 viewVector;
 varying vec3 wpos;
 varying float mat;
 varying float iswater;
+varying float isIce;
 varying float viewdistance;
 varying vec4 verts;
 
@@ -36,7 +30,6 @@ uniform sampler2D texture;
 uniform sampler2D noisetex;
 uniform float frameTimeCounter;
 
-#include "lib/waterBump.glsl"
 
 vec3 stokes(in float ka, in vec3 k, in vec3 g) {
     // ka = wave steepness, k = displacements, g = gradients / wave number
@@ -57,32 +50,103 @@ float smoothStep(in float edge0, in float edge1, in float x) {
     float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
     return t * t * (3.0f - 2.0f * t);
 }
-/*
-#ifdef PARALLAX_WATER
 
-	vec2 paralaxCoords(vec3 pos, vec3 tangentVector, float istransparent) {
-		float waveZ = mix(0.25,2.0,istransparent);
-		float waveM = mix(2.0,0.0,istransparent);
-		float waveS = mix(3.0,0.0,istransparent);
+vec4 cubic(float x)
+{
+    float x2 = x * x;
+    float x3 = x2 * x;
+    vec4 w;
+    w.x =   -x3 + 3*x2 - 3*x + 1;
+    w.y =  3*x3 - 6*x2       + 4;
+    w.z = -3*x3 + 3*x2 + 3*x + 1;
+    w.w =  x3;
+    return w / 6.f;
+}
 
-		float waterHeight = waterH(pos.xz - pos.y, istransparent) * 2.0;
+vec4 BicubicTexture(in sampler2D tex, in vec2 coord)
+{
+	int resolution = 1024;
 
-		vec3 paralaxCoord = vec3(0.0, 0.0, 1.0);
-		vec3 stepSize = vec3(waveS, waveS, 1.0);
-		vec3 step = tangentVector * stepSize;
+	coord *= resolution;
 
-		for (int i = 0; waterHeight < paralaxCoord.z && i < 15; i++) {
-			paralaxCoord.xy = mix(paralaxCoord.xy, paralaxCoord.xy + step.xy, clamp((paralaxCoord.z - waterHeight) / (stepSize.z * 0.2f / (-tangentVector.z + 0.05f)), 0.0f, 1.0));
-			paralaxCoord.z += step.z;
-			vec3 paralaxPosition = pos + vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
-			waterHeight = waterH(paralaxPosition.xz - paralaxPosition.y,istransparent) * 2.0;
-		}
-		pos += vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
-		return pos.xz - pos.y;
-	}
+	float fx = fract(coord.x);
+    float fy = fract(coord.y);
+    coord.x -= fx;
+    coord.y -= fy;
 
-#endif
-*/
+    vec4 xcubic = cubic(fx);
+    vec4 ycubic = cubic(fy);
+
+    vec4 c = vec4(coord.x - 0.5, coord.x + 1.5, coord.y - 0.5, coord.y + 1.5);
+    vec4 s = vec4(xcubic.x + xcubic.y, xcubic.z + xcubic.w, ycubic.x + ycubic.y, ycubic.z + ycubic.w);
+    vec4 offset = c + vec4(xcubic.y, xcubic.w, ycubic.y, ycubic.w) / s;
+
+    vec4 sample0 = texture2D(tex, vec2(offset.x, offset.z) / resolution);
+    vec4 sample1 = texture2D(tex, vec2(offset.y, offset.z) / resolution);
+    vec4 sample2 = texture2D(tex, vec2(offset.x, offset.w) / resolution);
+    vec4 sample3 = texture2D(tex, vec2(offset.y, offset.w) / resolution);
+
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+
+    return mix( mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}
+
+
+float waterH(vec2 posxz, float speed, float size, float iswater) {
+
+	vec2 movement = vec2(abs(frameTimeCounter/1000.-0.5))*speed;
+	vec2 movement2 = vec2(-abs(frameTimeCounter/1000.-0.5),abs(frameTimeCounter/1000.-0.5))*speed;
+	vec2 movement3 = vec2(-abs(frameTimeCounter/1000.-0.5))*speed;
+	vec2 movement4 = vec2(abs(frameTimeCounter/1000.-0.5),-abs(frameTimeCounter/1000.-0.5))*speed;
+
+	vec2 coord = (posxz/600)+(movement/5);
+	vec2 coord1 = (posxz/599.9)+(movement2/5);
+	vec2 coord2 = (posxz/599.8)+(movement3/5);
+	vec2 coord3 = (posxz/599.7)+(movement4);
+	vec2 coord4 = (posxz/1600)+(movement/1.5);
+	vec2 coord5 = (posxz/1599)+(movement2/1.5);
+	vec2 coord6 = (posxz/1598)+(movement3/1.5);
+	vec2 coord7 = (posxz/1597)+(movement4/1.5);
+	vec2 coord8 = (posxz/600);
+
+
+
+	float noise = BicubicTexture(noisetex, vec2(coord.x, -coord.y*5)).x/2;
+	noise += BicubicTexture(noisetex, vec2(-coord2.x, coord2.y)).x/2;
+	noise += BicubicTexture(noisetex, vec2(coord3.x, -coord3.y*3)).x/2;
+	noise += BicubicTexture(noisetex, vec2(-coord6.x*2, coord4.y)).x/2;
+	noise += BicubicTexture(noisetex, vec2(coord7.x, -coord5.y)).x/2;
+
+	return noise;
+}
+
+vec3 getWaveHeight(vec2 posxz, float iswater, float istransparent){
+
+	vec2 coord = posxz/1.5;
+
+		float deltaPos = 0.42;
+
+		float waveY = mix(1.0,6.0,isIce);
+		float speed = mix(0.0,1.0,iswater);
+
+		float h0 = waterH(coord, speed, waveY, iswater);
+		float h1 = waterH(coord + vec2(deltaPos,0.0), speed, waveY, iswater);
+		float h2 = waterH(coord + vec2(-deltaPos,0.0), speed, waveY, iswater);
+		float h3 = waterH(coord + vec2(0.0,deltaPos), speed, waveY, iswater);
+		float h4 = waterH(coord + vec2(0.0,-deltaPos), speed, waveY, iswater);
+
+		float xDelta = ((h1-h0)+(h0-h2))/deltaPos;
+		float yDelta = ((h3-h0)+(h0-h4))/deltaPos;
+
+		vec3 wave = normalize(vec3(xDelta,yDelta,1.0-pow(abs(xDelta+yDelta),2.0)));
+
+		return wave;
+}
+
+
+
+
 //////////////////////////////VOID MAIN//////////////////////////////
 //////////////////////////////VOID MAIN//////////////////////////////
 //////////////////////////////VOID MAIN//////////////////////////////
@@ -118,17 +182,10 @@ void main() {
 						tangent.y, binormal.y, normal.y,
 						tangent.z, binormal.z, normal.z);
 
-	#ifdef PARALLAX_WATER
-		vec4 modelView = gl_ModelViewMatrix * verts;
-		vec3 tangentVector = normalize(tbnMatrix * modelView.xyz);
-
-		posxz.xz = paralaxCoords(posxz, tangentVector, istransparent);
-	#endif
-
 	vec3 bump;
-		bump = getWaveHeight(posxz.xyz, iswater);
+	bump = getWaveHeight(posxz.xz - posxz.y, iswater, istransparent);
 
-	bump = bump * vec3(bumpmult, bumpmult, bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
+	bump = bump * vec3(bumpmult, bumpmult, 0.0) + vec3(0.0f, 0.0f, 1.0f);
 
 	frag2 = vec4(normalize(bump * tbnMatrix) * 0.5 + 0.5, 1.0);
 	frag3 = vec4(normalize(waves1(0.05) * tbnMatrix) * 0.5 + 0.5, 1.0);

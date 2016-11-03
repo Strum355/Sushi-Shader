@@ -707,6 +707,7 @@ void main() {
 	vec4 aux = texture2D(gaux1, texcoord.st);
 	int iswater = int(aux.g > 0.04 && aux.g < 0.07);
 	int isIce = int(aux.g > 0.94 && aux.g < 0.96);
+	float istransparent = float(aux.g > 0.4 && aux.g < 0.42)+isIce;
 
 	vec2 pos = (noisepattern(vec2(-0.94386347*floor(ftime*0.5+0.25),floor(ftime*0.5+0.25)))-0.5)*0.85+0.5;
 	float opaqueDepth = ExpToLinearDepth(texture2D(depthtex1, texcoord.st).x);
@@ -725,19 +726,15 @@ if(isIce>0.9 ){
 		 float blendWeightsTotal = dot(blendWeights, vec4(1.0));
 
 		 color = texture2DLod(gcolor,Tc.st,0).rgb  * blendWeights.x * MAX_COLOR_RANGE;
-		 color += texture2DLod(gcolor,Tc.st,0).rgb  * blendWeights.y * MAX_COLOR_RANGE;
-		 color += texture2DLod(gcolor,Tc.st,1).rgb  * blendWeights.z * MAX_COLOR_RANGE;
+		 color += texture2DLod(gcolor,Tc.st,1).rgb  * blendWeights.y * MAX_COLOR_RANGE;
+		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.z * MAX_COLOR_RANGE;
 		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.w * MAX_COLOR_RANGE;
 		 color /= blendWeightsTotal;
 } else {
 	color = texture2D(gcolor,Tc.st).rgb  * MAX_COLOR_RANGE;
 }
 
-if(isIce > 0.9){
-	vec3 waterFogColor = vec3(0.1, 0.95, 1.0);
- 		color.rgb *= waterFogColor;
-	color.rgb += (waterFogColor)*(subSurfaceScattering(lightVector.xyz, fragpos.xyz, 10))*(1-TimeMidnight*0.95);
-}
+
 
 	#ifdef DOF
 		float DoFGamma = 2.2;

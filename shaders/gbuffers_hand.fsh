@@ -113,7 +113,7 @@ void main() {
 
 
 
-/* DRAWBUFFERS:5246 */
+/* DRAWBUFFERS:0246 */
 
 	gl_FragData[0] = texture2D(texture, adjustedTexCoord)*color;
 	gl_FragData[1] = frag2;

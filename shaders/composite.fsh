@@ -12,7 +12,7 @@
 	const int 		shadowMapResolution 	= 2048;		//[512 1024 2048 4096]	//shadowmap resolution
 	const float 	shadowDistance 				= 180;		//[50 120 180 250] //draw distance of shadows
 
-	#define SHADOW_DARKNESS 0.1 //[0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]	//shadow darkness levels, lower values mean darker shadows, see .vsh for colors
+	#define SHADOW_DARKNESS 0.05 //[0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]	//shadow darkness levels, lower values mean darker shadows, see .vsh for colors
 	#define COLOURED_SHADOWS //Makes shadows from transparent blocks coloured by it's source.
 
 	#define SHADOW_FILTER						//smooth shadows
@@ -24,15 +24,14 @@
 	#define SUNLIGHTAMOUNT 3.2	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0]	//change sunlight strength , see .vsh for colors.
 
 	//Torch Color//
-	#define TORCH_COLOR 1.0,0.38,0.1 	//Torch Color RGB - Red, Green, Blue
-	#define TORCH_COLOR2 1.0,0.38,0.1 	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR 1.0,0.3,0.05 	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR2 1.0,0.3,0.05 	//Torch Color RGB - Red, Green, Blue
 
 	#define TORCH_ATTEN 8.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
 	#define TORCH_INTENSITY 4.55
 
 	//Minecraft lightmap (used for sky)
 	#define ATTENUATION 3.0
-	#define MIN_LIGHT 0.000
 
 //***************************VISUALS***************************//
 
@@ -255,6 +254,9 @@ const float speed = 2.5;
 float light_jitter = 1.0-sin(frameTimeCounter*1.4*speed+cos(frameTimeCounter*1.9*speed))*0.05;			//little light variations
 //float torch_lightmap = min(pow(altAux,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9)*light_jitter;
 //float torch_lightmap2 = min(pow(altAux,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9)*light_jitter;
+
+float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9)*light_jitter;
+float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9)*light_jitter;
 
 float modlmap = min(aux.b, 0.9);
 float torch_lightmap1 = max(((1.0/pow((1-modlmap)*10, 2.0)-(1.5*1.5)/(16.0*18.0))*TORCH_INTENSITY)-0.02, 0.0);
@@ -771,7 +773,7 @@ float getHandLight(in float hand, in positionStruct position){
 
 		handlight = (handlight)/pow(sqrt(dot(position.fragposition.xyz,position.fragposition.xyz)),2.0);
 
-		return handlight;
+		return min(handlight, 50.0);
 }
 #else
 float getHandLight(in float hand, in positionStruct position){
@@ -780,13 +782,11 @@ float getHandLight(in float hand, in positionStruct position){
 #endif
 
 vec3 getTorchMap(in positionStruct position, in shadingStruct shading){
+		float handlightDistance = 8.0f;
+		float handlightDistance2 = 7.0f;
 
-
-		float handlightDistance = 13.0f;
-		float handlightDistance2 = 5.0f;
-
-	vec3 Torchlight_lightmap = (torch_lightmap1+shading.handlight*2.0*pow(max(handlightDistance-sqrt(dot(position.fragposition.xyz,position.fragposition.xyz)),0.0)/handlightDistance,4.0)*max(dot(-position.fragposition.xyz,normal),0.0)) *  torchcolor * max(1.0, TimeMidnight*2) ;
-	//Torchlight_lightmap += (torch_lightmap+shading.handlight*pow(max(handlightDistance2-sqrt(dot(position.fragposition.xyz,position.fragposition.xyz)),0.0)/handlightDistance2,4.0)*max(dot(-position.fragposition.xyz,normal),0.0)) * torchcolor2;
+	vec3 Torchlight_lightmap = (torch_lightmap+shading.handlight*2.0*pow(max(handlightDistance-sqrt(dot(position.fragposition.xyz,position.fragposition.xyz)),0.0)/handlightDistance,4.0)*max(dot(-position.fragposition.xyz,normal),0.0)) *  torchcolor * max(1.0, TimeMidnight*2) ;
+	Torchlight_lightmap += (torch_lightmap2+shading.handlight*pow(max(handlightDistance2-sqrt(dot(position.fragposition.xyz,position.fragposition.xyz)),0.0)/handlightDistance2,4.0)*max(dot(-position.fragposition.xyz,normal),0.0)) * torchcolor2;
 
 	return Torchlight_lightmap*(1-dynamicExposure1());
 }
@@ -846,7 +846,7 @@ vec3 getSaturation(vec3 color, float saturation)
 }
 
 vec3 nightDesaturation(vec3 inColor){
-	float amount =  1*pow(1-torch_lightmap1, 50.0)*1-getHandLight(hand, position)*20;
+	float amount =  1*pow(1-torch_lightmap1, 50.0)*1-getHandLight(hand, position)*50;
 	vec3 nightColor = vec3(0.25, 0.35, 0.7)/2;
 
 	float saturation = 0.0;
@@ -990,7 +990,7 @@ vec3 getSkyGrad(vec3 color, bool land,in positionStruct position) {
 
 			color *= mix(mix(1.5,1.0,TimeMidnight),0.5,1.0 - transition_fading);
 
-			//color *= pos;
+			 //color *= pos;
 			color += sunmoon;
 
 
@@ -1019,44 +1019,15 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 			float visibility = lightMap.skyLightMap;
 
 		//Apply different lightmaps to image
-
-		vec3 light_col =  mix(pow(sunlight_color,vec3(2.2)),moonlight,moonVisibility)*(1-rainx);
-
-			vec3 Sunlight_lightmap = sunlight_color * shading.shadows * SUNLIGHTAMOUNT * (1.0 - rainx) * shading.sunLD * transition_fading;
+			vec3 Sunlight_lightmap = max((sunlight_color * shading.shadows * (SUNLIGHTAMOUNT*(1-TimeMidnight*0.95)) * (1.0 - rainx) * shading.sunLD * transition_fading),0.000005*(visibility));
 
 			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight*0.75)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*visibility*bouncefactor;
+			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*visibility*bouncefactor;
 
 			//Add all light elements together
-			return (((sky_light + MIN_LIGHT) * (0.1) + shading.torchmap) + Sunlight_lightmap +  shading.sss * Sunlight_lightmap * 0.5) * shading.ao;
+			return (((sky_light) * (0.1) + shading.torchmap) + Sunlight_lightmap +  shading.sss * Sunlight_lightmap * 0.5) * shading.ao;
 }
-
-float Blinn_Phong(vec3 ppos, vec3 lvector, vec3 normal, float gloss, float visibility, float glossmult)  {
-	vec3 lightDir = vec3(lvector);
-
-	vec3 surfaceNormal = normal;
-	float cosAngIncidence = dot(surfaceNormal, lightDir);
-	cosAngIncidence = clamp(cosAngIncidence, 0.0, 1.0);
-
-	vec3 viewDirection = normalize(-ppos);
-
-	vec3 halfAngle = normalize(lightDir + viewDirection);
-	float blinnTerm = dot(surfaceNormal, halfAngle);
-
-	float normalDotEye = dot(normal, normalize(ppos));
-	float fresnel = clamp(pow(1.0 + normalDotEye, 5.0),0.0,1.0);
-	fresnel = fresnel*0.85 + 0.15 * (1.0-fresnel);
-	float pi = 3.1415927;
-	float n =  pow(2.0,gloss*glossmult);
-	float blinn = (pow(blinnTerm, n )*((n+8.0)/(8*pi)))*visibility;
-	if(blinn < 0.2){
-		blinn = 0;
-	}
-	return blinn;
-}
-
-
 
 ///////////////////////////////VOID MAIN///////////////////////////////
 ///////////////////////////////VOID MAIN///////////////////////////////
