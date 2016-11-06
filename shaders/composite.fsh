@@ -28,17 +28,17 @@
 	#define TORCH_COLOR2 1.0,0.3,0.05 	//Torch Color RGB - Red, Green, Blue
 
 	#define TORCH_ATTEN 8.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
-	#define TORCH_INTENSITY 4.55
+	#define TORCH_INTENSITY 1.55
 
 	//Minecraft lightmap (used for sky)
-	#define ATTENUATION 3.0
+	#define ATTENUATION 4.0
 
 //***************************VISUALS***************************//
 
 	//#define SSAO
 	const int nbdir = 6;	           //qualtiy
 	const float sampledir = 6;	      //quality
-	const float ssaorad = 0.5;	 //strength
+	const float ssaorad = 1.5;	 //strength
 
 //***************************VOLUMETRIC LIGHT***************************//
 	#define VOLUMETRIC_LIGHT
@@ -237,7 +237,6 @@ bool land2 								= pixeldepth < comp;
 float iswater 						= float(aux.g > 0.04 && aux.g < 0.07);
 float translucent 				= float(aux.g > 0.3 && aux.g <= 0.4);
 float hand 								= float(aux.g > 0.75 && aux.g < 0.85);
-
 float emissive 						= float(aux.g > 0.58 && aux.g < 0.62);
 float islava 						= float(aux.g > 0.50 && aux.g < 0.55);
 
@@ -256,7 +255,7 @@ float light_jitter = 1.0-sin(frameTimeCounter*1.4*speed+cos(frameTimeCounter*1.9
 //float torch_lightmap2 = min(pow(altAux,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9)*light_jitter;
 
 float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9)*light_jitter;
-float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9)*light_jitter;
+float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*1.8)*TORCH_INTENSITY*65, 0.9)*light_jitter;
 
 float modlmap = min(aux.b, 0.9);
 float torch_lightmap1 = max(((1.0/pow((1-modlmap)*10, 2.0)-(1.5*1.5)/(16.0*18.0))*TORCH_INTENSITY)-0.02, 0.0);
@@ -606,7 +605,7 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 			}
 
 				int weight;
-				step = 5.625/shadowMapResolution*(1.0+rainx*5.0);
+				step = 1.625/shadowMapResolution*(1.0+rainx*5.0);
 
 				#ifdef SHADOW_FILTER
 
@@ -766,7 +765,7 @@ float getSSAO(in float ao, bool land, float hand){
 #ifdef DYNAMIC_HANDLIGHT
 float getHandLight(in float hand, in positionStruct position){
 
-		float handlight = handItemLight*0.5*HANDLIGHT_AMOUNT;
+		float handlight;
 
 		handlight = (handItemLight*10.0*HANDLIGHT_AMOUNT)*hand;
 		handlight += (handItemLight*1.0*HANDLIGHT_AMOUNT);
@@ -846,7 +845,7 @@ vec3 getSaturation(vec3 color, float saturation)
 }
 
 vec3 nightDesaturation(vec3 inColor){
-	float amount =  1*pow(1-torch_lightmap1, 50.0)*1-getHandLight(hand, position)*50;
+	float amount =  1*(pow(1-torch_lightmap1, 50.0)*(pow(1-getHandLight(hand, position),20.0)));
 	vec3 nightColor = vec3(0.25, 0.35, 0.7)/2;
 
 	float saturation = 0.0;
@@ -1023,10 +1022,10 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 
 			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*visibility*bouncefactor;
+			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*pow(visibility, 4.0)*bouncefactor;
 
 			//Add all light elements together
-			return (((sky_light) * (0.1) + shading.torchmap) + Sunlight_lightmap +  shading.sss * Sunlight_lightmap * 0.5) * shading.ao;
+			return (((sky_light+0.0005) * (0.1) + shading.torchmap) + Sunlight_lightmap +  shading.sss * Sunlight_lightmap * 0.5) * shading.ao;
 }
 
 ///////////////////////////////VOID MAIN///////////////////////////////

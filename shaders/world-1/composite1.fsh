@@ -7,12 +7,6 @@
 
 //***************************GODRAYS***************************//
 
-//#define GODRAYS
-	const float exposure = 0.25;
-	const float density = 1;
-	const int NUM_SAMPLES = 10;			//increase this for better quality at the cost of performance
-	const float grnoise = 1.0;		//amount of noise /0.0 is default
-
 //***************************REFLECTIONS***************************//
 
 #define REFLECTIONS
@@ -33,23 +27,6 @@
 
 #define WATER_DEPTH_FOG
 
-//***************************CLOUDS***************************//
-
-#define Clouds	//2d clouds
-
-//#define VOLUMETRIC_CLOUDS //3d clouds. WARNING!!! VERY FPS INTENSIVE. Might also bug a little bit.
-
-//***************************VISUALS***************************//
-
-#define Stars
-
-//***************************VOLUMETRIC LIGHT***************************//
-#define VOLUMETRIC_LIGHT
-	#define VL_MULT 					1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	// Simple multiplier
-	#define VL_STRENGTH_DAY 			1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	// Strength of day time
-	#define VL_STRENGTH_NIGHT 			4.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0] // Strength of night time
-	#define VL_STRENGTH_SUNSET_SUNRISE 	1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0] // Strength of sunset and sunrise time
-	#define VL_STRENGTH_INSIDE 			1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	// Strength inside buildings
 
 //***************************END OF ADJUSTABLE VARIABLES***************************//
 //***************************END OF ADJUSTABLE VARIABLES***************************//
@@ -221,7 +198,7 @@ vec3 renderGaux2(vec3 color, vec2 pos){
 	float mixAmount = mix(stainedColor.a*satValue, 1.0, float(isIce));
 	vec3 divisionAmount = mix(vec3(1.0),mix(color.rgb, vec3(1.0), TimeMidnight), saturate(isIce));
 
-	return mix(color,stainedColor.rgb*(color/divisionAmount),saturate(mixAmount*satValue));
+	return mix(color,stainedColor.rgb*(color*4),saturate(mixAmount*satValue));
 //return mix(color,stainedColor.rgb * 1.5 * color,clamp(stainedColor.a * 1.25,0.0,1.0));
 
 }

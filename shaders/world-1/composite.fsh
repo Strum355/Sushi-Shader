@@ -619,7 +619,7 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 
 			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = ambient_color*1000*visibility*bouncefactor;
+			vec3 sky_light = ambient_color*1000*pow(visibility, 1.10)*bouncefactor;
 
 			//Add all light elements together
 			return (((sky_light)  + shading.torchmap)) * shading.ao;

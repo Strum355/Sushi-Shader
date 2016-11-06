@@ -40,14 +40,7 @@
 #define CONTRAST 1.0 //[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
 #define SATURATION 1.25 //[1.0 1.1 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]
 
-
-#define DYNAMIC_EXPOSURE					//Makes brighter inside and turned off outside
-	#define DYNAMIC_EXPOSURE_AMOUNT 1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	//Strength
-
 //***************************EFFECTS***************************//
-
-#define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
-
 #define RAIN_DROP
 
 //***************************END OF ADJUSTABLE VARIABLES***************************//
@@ -135,22 +128,43 @@ return pow(max(dot(vec,normalize(pos))*0.5+0.5,0.0),N)*(N+1)/6.28;
 
 }
 
+float distratio(vec2 pos, vec2 pos2) {
+	float xvect = pos.x*aspectRatio-pos2.x*aspectRatio;
+	float yvect = pos.y-pos2.y;
+	return sqrt(xvect*xvect + yvect*yvect);
+}
+
+vec2 noisepattern(vec2 pos) {
+	return vec2(abs(fract(sin(dot(pos ,vec2(18.9898f,28.633f))) * 4378.5453f)),abs(fract(sin(dot(pos.yx ,vec2(18.9898f,28.633f))) * 4378.5453f)));
+}
+
+float gen_circular_lens(vec2 center, float size) {
+	float dist=distratio(center,texcoord.xy)/size;
+	return exp(-dist*dist);
+}
+
 #ifdef RAIN_DROP
 float waterDrop (vec2 tc) {
-	vec2 drop = vec2(0.0,fract(frameTimeCounter/750.0));
-	tc.x *= 10;
-	float noise = texture2D(noisetex,(tc+drop)/2).x;
-	noise += texture2D(noisetex,(tc+drop)).x/2;
-	noise += texture2D(noisetex,(tc+drop)*2).x/4;
-	noise += texture2D(noisetex,(tc+drop)*4).x/8;
-	noise += texture2D(noisetex,(tc+drop*0.5)).x/2;
-	noise += texture2D(noisetex,(tc+drop*0.5)*2).x/4;
-	noise += texture2D(noisetex,(tc+drop*0.5)*4).x/8;
-	float dropstrength = max(noise-1.8,0.0);
-	float wdrop = 0.1;
-	float waterD = (1.0 - (pow(wdrop,dropstrength)));
-	waterD *= clamp((eyeBrightnessSmooth.y-220)/15.0,0.0,1.0)*rainStrength;
-	return waterD;
+	const float lifetime = 8.0;		//water drop lifetime in seconds
+
+	float ftime = frameTimeCounter*2.0/lifetime;
+	vec2 drop = vec2(0.0,fract(frameTimeCounter/20.0));
+
+	float gen = 1.0-fract((ftime+0.5)*0.5);
+	vec2 pos = (noisepattern(vec2(-0.94386347*floor(ftime*0.5+0.25),floor(ftime*0.5+0.25))))*0.8+0.1 - drop;
+  float rainlens = gen_circular_lens(fract(pos),0.04)*gen*rainStrength;
+	gen = 1.0-fract((ftime+1.0)*0.5);
+	pos = (noisepattern(vec2(0.9347*floor(ftime*0.5+0.5),-0.2533282*floor(ftime*0.5+0.5))))*0.8+0.1- drop;
+	rainlens += gen_circular_lens(fract(pos),0.023)*gen*rainStrength;
+	gen = 1.0-fract((ftime+1.5)*0.5);
+	pos = (noisepattern(vec2(0.785282*floor(ftime*0.5+0.75),-0.285282*floor(ftime*0.5+0.75))))*0.8+0.1- drop;
+	rainlens += gen_circular_lens(fract(pos),0.03)*gen*rainStrength;
+	gen =  1.0-fract(ftime*0.5);
+	pos = (noisepattern(vec2(-0.347*floor(ftime*0.5),0.6847*floor(ftime*0.5))))*0.8+0.1- drop;
+	rainlens += gen_circular_lens(fract(pos),0.05)*gen*rainStrength;
+	rainlens *= clamp((eyeBrightnessSmooth.y-220)/15.0,0.0,1.0);
+
+	return rainlens*5;
 }
 #endif
 
@@ -178,7 +192,7 @@ vec2 customTexcoord(){
 
 	fake_refract = vec2(sin(frameTimeCounter*2.0 + texC.x*0.0 + texC.y*25.0),cos(frameTimeCounter*2.0 + texC.y*0.0 + texC.x*50.0)) * 2.5 *isEyeInWater;
 	#ifdef RAIN_DROP
-		fake_refract2 = vec2(sin(frameTimeCounter*1.0 + texC.x*0.0 + texC.y*100.0),cos(frameTimeCounter*1.0 + texC.y*0.0 + texC.x*200.0))*waterDrop(texC.xy/300)*5 ;
+		fake_refract2 = vec2(sin(frameTimeCounter*1.0 + texC.x*0.0 + texC.y*100.0),cos(frameTimeCounter*1.0 + texC.y*0.0 + texC.x*200.0))*waterDrop(texC.xy/300)*6 ;
 	#endif
 
 	vec2 refracts = (fake_refract + fake_refract2) / 500.0;
@@ -280,11 +294,6 @@ float distratio(vec2 pos, vec2 pos2, float ratio) {
 	float yvect = pos.y-pos2.y;
 
 	return sqrt(xvect*xvect + yvect*yvect);
-}
-
-
-vec2 noisepattern(vec2 pos) {
-return vec2(abs(fract(sin(dot(pos ,vec2(18.9898f,28.633f))) * 4378.5453f)),abs(fract(sin(dot(pos.yx ,vec2(18.9898f,28.633f))) * 4378.5453f)));
 }
 
 
@@ -677,6 +686,7 @@ void TonemapVorontsov(inout vec3 color) {
 	 float tonemapDecay			= 21000.0;
 	 float tonemapCurve			= 0.50;
 
+	color *= 2.0;
 	vec3 colorN = normalize(color.rgb);
 	vec3 clrfr = color.rgb/colorN.rgb;
 	     clrfr = pow(clrfr.rgb, vec3(tonemapContrast));
@@ -773,22 +783,9 @@ if(isIce>0.9 ){
 		color.rgb += getBloom(Tc.st) * 0.03 * B_INTENSITY * MAX_COLOR_RANGE;
 	#endif
 
-	#ifdef CALCULATE_EXPOSURE
-		if (isEyeInWater > 0.9)
-			color.rgb = calcExposure(color);
-	#endif
-
-	#ifdef LENS_EFFECTS
-		getLensFlare(color);
-	#endif
-
-	color = getExposure(color);
-
+	if (isEyeInWater > 0.9) color.rgb = calcExposure(color);
 
 	TonemapVorontsov(color);
-//	color = robobo1221sTonemap(color);
-
-	vec3 lel = texture2D(composite, texcoord.st/2).rgb*MAX_COLOR_RANGE;
 
 	gl_FragColor = vec4(color, 1.0);
 }

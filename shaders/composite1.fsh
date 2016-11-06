@@ -1,4 +1,5 @@
 #version 120
+#extension GL_ARB_shader_texture_lod : enable
 
 #define MAX_COLOR_RANGE 48.0 //[1.0 2.0 4.0 6.0 12.0 24.0 48.0 96.0]
 //***************************ADJUSTABLE VARIABLES***************************//
@@ -142,7 +143,8 @@ int iswater = int(aux.g > 0.04 && aux.g < 0.07);
 int land2 = int(aux.g < 0.03);
 int hand  = int(aux.g > 0.75 && aux.g < 0.85);
 int isIce = int(aux.g > 0.94 && aux.g < 0.96);
-float istransparent = float(aux.g > 0.4 && aux.g < 0.42)+isIce;
+int portal = int(aux.g > 0.97 && aux.g < 0.99);
+float istransparent = float(aux.g > 0.4 && aux.g < 0.42)+isIce+portal;
 float islava = float(aux.g > 0.50 && aux.g < 0.55);
 
 
@@ -269,28 +271,32 @@ return pow(max(dot(vec,normalize(pos))*0.5+0.5,0.0),N)*(N+1)/6.28;
 
 }
 
-float waterH(vec2 posxz,float speed, float y,float iswater) {
+float waterH(vec2 posxz, float speed, float size, float iswater) {
 
-	vec2 movement = vec2(abs(frameTimeCounter/1000.-0.5),abs(frameTimeCounter/1000.-0.5))*speed;
+	vec2 movement = vec2(abs(frameTimeCounter/1000.-0.5))*speed;
 	vec2 movement2 = vec2(-abs(frameTimeCounter/1000.-0.5),abs(frameTimeCounter/1000.-0.5))*speed;
-	vec2 movement3 = vec2(-abs(frameTimeCounter/1000.-0.5),-abs(frameTimeCounter/1000.-0.5))*speed;
+	vec2 movement3 = vec2(-abs(frameTimeCounter/1000.-0.5))*speed;
 	vec2 movement4 = vec2(abs(frameTimeCounter/1000.-0.5),-abs(frameTimeCounter/1000.-0.5))*speed;
 
-	vec2 coord = (posxz/600)+(movement/5);
+	vec2 coord = (posxz/600)+(movement);
+	vec2 coord1 = (posxz/599.9)+(movement2/5);
 	vec2 coord2 = (posxz/599.8)+(movement3/5);
 	vec2 coord3 = (posxz/599.7)+(movement4);
 	vec2 coord4 = (posxz/1600)+(movement/1.5);
 	vec2 coord5 = (posxz/1599)+(movement2/1.5);
 	vec2 coord6 = (posxz/1598)+(movement3/1.5);
 	vec2 coord7 = (posxz/1597)+(movement4/1.5);
+	vec2 coord8 = (posxz/600);
 
-	float noise = BicubicTexture(noisetex, vec2(coord.x, -coord.y*3)).x*y;
-	noise += BicubicTexture(noisetex, vec2(-coord2.x*3, coord2.y)).x*y;
-	noise += BicubicTexture(noisetex, vec2(coord3.x, -coord3.y*3)).x*y;
-	noise += BicubicTexture(noisetex, vec2(-coord6.x*3, coord4.y)).x*y;
-	noise += BicubicTexture(noisetex, vec2(coord7.x*3, -coord5.y)).x*y;
 
-	return noise/7;
+
+	float noise = texture2DLod(noisetex, vec2(coord.x, -coord.y*2),4).x;
+	noise += texture2DLod(noisetex, vec2(-coord2.x, coord2.y),4).x;
+	noise += texture2DLod(noisetex, vec2(coord3.x, -coord3.y*3),4).x;
+	noise += texture2DLod(noisetex, vec2(-coord6.x*2, coord4.y),4).x;
+	noise += texture2DLod(noisetex, vec2(coord7.x, -coord5.y),4).x;
+
+	return noise/10;
 }
 
 vec3 getWaveHeight(vec2 posxz, float iswater, float istransparent){
@@ -300,7 +306,7 @@ vec3 getWaveHeight(vec2 posxz, float iswater, float istransparent){
 		float deltaPos = 0.22;
 
 		float waveZ = mix(0.200,1,iswater);
-		float waveM = mix(0.0,1.0,iswater);
+		float waveM = mix(0.0,1.0,iswater+portal);
 
 		float h0 = waterH(coord, waveM, waveZ, istransparent);
 		float h1 = waterH(coord + vec2(deltaPos,0.0), waveM, waveZ, iswater);
@@ -326,6 +332,7 @@ float noisepattern(vec2 pos, float sample) {
 
 float startPixeldepth = texture2D(depthtex1,texcoord.st).x;
 float startPixeldepth2 = texture2D(depthtex0,texcoord.st).x;
+float refractionMult = mix(100.0, 15.0, float(istransparent));
 
 float refractmask(vec2 coord, float lod){
 
@@ -336,7 +343,7 @@ float refractmask(vec2 coord, float lod){
 	}
 
 	if (istransparent > 0.9){
-		mask = float(mask > 0.4 && mask < 0.42)+float(mask > 0.94 && mask < 0.96);
+		mask = float(mask > 0.4 && mask < 0.42)+float(mask > 0.94 && mask < 0.96)+float(mask > 0.97 && mask < 0.99);
 	}
 
 	return mask;
@@ -356,19 +363,19 @@ float refractmask(vec2 coord, float lod){
 		vec3 posxz = worldposition.xyz + cameraPosition.xyz;
 
 		float getAngle = dot(normal2, normalize(fragpos));
-		float dispersionMult = saturate(pow(1.0 + getAngle, 1.0));
+		float dispersionMult = clamp(pow(1.0 + getAngle, 1.0),0.0,1.0);
 		dispersionMult = pow(dispersionMult,1.0 - getAngle);
 
 		float dispersion = 0.25 * dispersionMult;
 
 		refraction = getWaveHeight(posxz.xz - posxz.y, iswater, istransparent);
+
 		vec2 depth = vec2(0.0);
 			depth.x = getDepth(startPixeldepth);
 			depth.y = getDepth(startPixeldepth2);
 
-			float refractionMult = mix(100.0, 5.0, float(istransparent));
 		float refMult = 1.0;
-			refMult = saturate(depth.x - depth.y);
+			refMult = clamp(depth.x - depth.y,0.0,1.0);
 			refMult /= depth.y;
 			refMult *= REFRACT_MULT / refractionMult;
 			refMult *= mix(1.0,0.1,istransparent);
@@ -416,7 +423,6 @@ vec2 refractionTexcoord(){
 }
 
 vec2 refractionTC = refractionTexcoord();
-
 float pixeldepth = texture2D(depthtex1,refractionTC.xy,0).x;
 float pixeldepth2 = texture2D(depthtex0,refractionTC.xy,0).x;
 
@@ -640,7 +646,7 @@ vec3 getFog(vec3 color, bool land, bool land2, vec2 pos){
 		float fogfactor2 =  clamp(fog2 + hand,0.0,1.0);
 		float fogfactor3 =  clamp(fog3 + hand,0.0,1.0);
 
-		color = pow(color, vec3(2.2));
+		color = pow(color, vec3(1));
 
 		vec3 fogclr = mix(color.rgb,ambient_color,0.06 + clamp((20000*TimeMidnight), 0.0, 0.25))*(1.0-rainx)*(1.0-TimeMidnight*0.87);
 		fogclr = clamp(mix(fogclr, ambient_color * pow(1.0 - fogfactor,1.0 / 8.0), (1-TimeMidnight)*(1+TimeSunrise*.25)*(1+TimeNoon*.5)),0.0,1.0);
@@ -651,7 +657,7 @@ vec3 getFog(vec3 color, bool land, bool land2, vec2 pos){
 
 		//glow
 
-		fogclr = mix(fogclr, pow(sunlight,vec3(2.2)) * 2.0 + fogclr, volumetric_cone*transition_fading*(1.0-TimeMidnight)*(1.0-TimeNoon)*(1.0-rainx*0.4) * 1.5);
+		fogclr = mix(fogclr, pow(sunlight,vec3(1)) * 2.0 + fogclr, volumetric_cone*transition_fading*(1.0-TimeMidnight)*(1.0-TimeNoon)*(1.0-rainx*0.4) * 1.5);
 		fogclr += fogclr * 0.05 * volumetric_cone*2*transition_fading*TimeMidnight*(1.0-rainx)*1.0;
 
 		fogclr = mix(fogclr,sunlight,volumetric_cone*TimeNoon*(1.0-rainx));
@@ -660,22 +666,22 @@ vec3 getFog(vec3 color, bool land, bool land2, vec2 pos){
 			} else {
 
 		if (land) {
-			color.rgb = mix(color.rgb,pow(fogclr, vec3(2.2)),(1-fogfactor)*0.5*(1-clamp(calcHeight,0.0,1.0))*.5*(1- dynamicExposure()));
+			color.rgb = mix(color.rgb,pow(fogclr, vec3(1)),(1-fogfactor)*0.5*(1-clamp(calcHeight,0.0,1.0))*.5*(1- dynamicExposure()));
 		}
 
-		color.rgb = mix(color.rgb,pow(fogclr2, vec3(2.2)),(1-fogfactor2)*rainx);
+		color.rgb = mix(color.rgb,pow(fogclr2, vec3(1)),(1-fogfactor2)*rainx);
 
 
 		//altitude fog
-		if (land) {
-				color.rgb = mix(color.rgb,pow(fogclr, vec3(2.2)),clamp((1-fogfactor)*(1-rainx)*(1-TimeMidnight)*(clamp((calcHeight) * 0.6, 0.0, 1.0)),0.0,1.0));
+
+				color.rgb = mix(color.rgb,pow(fogclr, vec3(1)),clamp((1-fogfactor)*(1-rainx)*(1-TimeMidnight)*(clamp((calcHeight) * 0.6, 0.0, 1.0)),0.0,1.0));
 
 				calcHeight = (max(pow(max(0.76 - horizon/300.0, 0.0), 8.0)-0.0, 0.0));
-				color.rgb  = mix(color.rgb,pow(clamp(fogclr * 1.5, 0.0, 1.0), vec3(2.2)),clamp(3.0*(clamp((calcHeight) * 100, 0.0, 1.0))*(TimeMidnight)*(1- rainx)*(1-TimeSunrise)*(transition_fading)*(1-fogfactor3),0.0,1.0));
-			}
+				color.rgb  = mix(color.rgb,pow(clamp(fogclr * 1.5, 0.0, 1.0), vec3(1)),clamp(3.0*(clamp((calcHeight) * 100, 0.0, 1.0))*(TimeMidnight)*(1- rainx)*(1-TimeSunrise)*(transition_fading)*(1-fogfactor3),0.0,1.0));
+
 
 	}
-	return pow(color, vec3(0.4545));
+	return pow(color, vec3(1));
 }
 #endif
 
@@ -743,9 +749,9 @@ vec4 raytrace(vec3 fragpos, vec3 normal, vec3 fogclr, vec3 rvector, float fresne
 
 						color.a = 1.0;
 
-						#ifdef FOG
+				/*		#ifdef FOG
 							color.rgb = getFog(color.rgb, land, land, pos.st);
-						#endif
+						#endif*/
 
 						color.rgb *= fresnel;
 
@@ -906,7 +912,7 @@ vec3 waterRefraction(vec3 color) {
 	refraction.g = bool(maskCoord2) ? rA.g : color.g;
 	refraction.b = bool(maskCoord3) ? rA.b : color.b;
 
-	if (iswater > 0.9 || istransparent > 0.9 || isIce > 0.9)	color = refraction;
+	if (iswater > 0.9 || istransparent > 0.9 || isIce > 0.9 || portal > 0.9)	color = refraction;
 
 	return color;
 }
@@ -916,7 +922,7 @@ vec3 waterRefraction(vec3 color) {
 vec3 getColorCorrection(vec3 color, bool land){
 
 	//Color changes depends on time//
-
+	color.g -= color.g*0.1*TimeMidnight;
 	color.b += color.b*0.1*(1-rainx)*(1-islava);
 	color.r -= color.r*0.25*(1-rainx)*(1-islava);
 
@@ -1271,6 +1277,7 @@ void main() {
 
 		vec3 reflColor = mix(color*100, light_col, iswater);
 
+		spec *= (1-portal);
 		getSky += ((spec)*stuff.r)*reflColor;
 
 
@@ -1305,11 +1312,8 @@ void main() {
 
 	#endif
 
-	#ifdef FOG
-		if (!land && land2)color.rgb = mix(color,getRainFogColor(),pow(rainx,4.0));
-	#else
-		if (!land)color.rgb = mix(color,getRainFogColor(),pow(rainx,4.0));
-	#endif
+
+	if (!land)color.rgb = mix(color,getRainFogColor(),pow(rainx,4.0));
 
 
 
@@ -1364,8 +1368,9 @@ void main() {
 	if(isIce > 0.9){
 		vec3 waterFogColor = vec3(0.1, 0.95, 1.0);
 	 		color.rgb *= waterFogColor;
-		color.rgb += (waterFogColor)*(subSurfaceScattering(lightVector.xyz, fragpos.xyz, 10))*(1-TimeMidnight*0.95);
+		color.rgb += (waterFogColor)*(subSurfaceScattering(lightVector.xyz, fragpos.xyz, 10))*(1-TimeMidnight*0.95)*(1-rainx);
 	}
+
 		color.rgb = getColorCorrection(color,land);
 
 	//color = mix(color, vec3(1.0),vec3(clamp(exp(-depth * 5.0),0.0,1.0)) * iswater * pow(getRainPuddles(20.0, frameTimeCounter / 2000.0),1.0));

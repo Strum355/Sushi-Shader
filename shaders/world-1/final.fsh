@@ -680,10 +680,10 @@ vec3 getSaturation(vec3 color, float saturation)
 }
 
 void TonemapVorontsov(inout vec3 color) {
-	 float tonemapContrast 		= 1.4;
-	 float tonemapSaturation 	= 1.7;
+	 float tonemapContrast 		= 1.5;
+	 float tonemapSaturation 	= 1.2;
 	 float tonemapDecay			= 21000.0;
-	 float tonemapCurve			= 0.50;
+	 float tonemapCurve			= 01.50;
 
 	vec3 colorN = normalize(color.rgb);
 	vec3 clrfr = color.rgb/colorN.rgb;
