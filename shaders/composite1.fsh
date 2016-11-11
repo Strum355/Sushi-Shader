@@ -1336,7 +1336,7 @@ void main() {
 	#endif
 
 	#ifdef VOLUMETRIC_LIGHT
-		color.rgb = vlColor(vlFogColor, color.rgb, refractionTC.st, fragpos2);;
+		color.rgb = vlColor(vlFogColor, color.rgb, refractionTC.st, fragpos2);
 	#endif
 
 	float depth_diff = pow(clamp(sqrt(dot(fragpos,fragpos)) * 0.01,0.0,1.0), 0.05);
@@ -1369,6 +1369,9 @@ void main() {
 		vec3 waterFogColor = vec3(0.1, 0.95, 1.0);
 	 		color.rgb *= waterFogColor;
 		color.rgb += (waterFogColor)*(subSurfaceScattering(lightVector.xyz, fragpos.xyz, 10))*(1-TimeMidnight*0.95)*(1-rainx);
+	}
+	if(istransparent > 0.9 && isIce < 0.9){
+		color.rgb *=;
 	}
 
 		color.rgb = getColorCorrection(color,land);

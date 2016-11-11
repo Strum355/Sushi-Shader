@@ -12,7 +12,7 @@
 	const int 		shadowMapResolution 	= 2048;		//[512 1024 2048 4096]	//shadowmap resolution
 	const float 	shadowDistance 				= 180;		//[50 120 180 250] //draw distance of shadows
 
-	#define SHADOW_DARKNESS 0.05 //[0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]	//shadow darkness levels, lower values mean darker shadows, see .vsh for colors
+	#define SHADOW_DARKNESS 0.5 //[0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]	//shadow darkness levels, lower values mean darker shadows, see .vsh for colors
 	#define COLOURED_SHADOWS //Makes shadows from transparent blocks coloured by it's source.
 
 	#define SHADOW_FILTER						//smooth shadows
@@ -24,11 +24,11 @@
 	#define SUNLIGHTAMOUNT 3.2	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0]	//change sunlight strength , see .vsh for colors.
 
 	//Torch Color//
-	#define TORCH_COLOR 1.0,0.3,0.05 	//Torch Color RGB - Red, Green, Blue
-	#define TORCH_COLOR2 1.0,0.3,0.05 	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR 1.2,0.2,0.005 	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR2 1.2,0.2,0.005 	//Torch Color RGB - Red, Green, Blue
 
-	#define TORCH_ATTEN 8.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
-	#define TORCH_INTENSITY 1.55
+	#define TORCH_ATTEN 5.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
+	#define TORCH_INTENSITY 0.25
 
 	//Minecraft lightmap (used for sky)
 	#define ATTENUATION 4.0
@@ -38,7 +38,7 @@
 	//#define SSAO
 	const int nbdir = 6;	           //qualtiy
 	const float sampledir = 6;	      //quality
-	const float ssaorad = 1.5;	 //strength
+	const float ssaorad = 1.0;	 //strength
 
 //***************************VOLUMETRIC LIGHT***************************//
 	#define VOLUMETRIC_LIGHT
@@ -250,15 +250,12 @@ float ph = 1.0/ viewHeight;
 
 float altAux = 1-aux.b;
 const float speed = 2.5;
-float light_jitter = 1.0-sin(frameTimeCounter*1.4*speed+cos(frameTimeCounter*1.9*speed))*0.05;			//little light variations
+//float light_jitter = 1.0-sin(frameTimeCounter*1.4*speed+cos(frameTimeCounter*1.9*speed))*0.1;			//little light variations
 //float torch_lightmap = min(pow(altAux,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9)*light_jitter;
 //float torch_lightmap2 = min(pow(altAux,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9)*light_jitter;
 
-float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9)*light_jitter;
-float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*1.8)*TORCH_INTENSITY*65, 0.9)*light_jitter;
-
-float modlmap = min(aux.b, 0.9);
-float torch_lightmap1 = max(((1.0/pow((1-modlmap)*10, 2.0)-(1.5*1.5)/(16.0*18.0))*TORCH_INTENSITY)-0.02, 0.0);
+float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*50.0, 0.9);
+float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*5)*TORCH_INTENSITY*95, 0.9);
 
 vec3 torchcolor = vec3(TORCH_COLOR)*eyeAdapt*0.1*TORCH_INTENSITY;
 vec3 torchcolor2 = vec3(TORCH_COLOR2)*eyeAdapt*TORCH_INTENSITY;
@@ -582,6 +579,12 @@ vec3 getFragpos(in positionStruct position){
 	return nvec3(gbufferProjectionInverse * nvec4(position.texDepth * 2.0 - 1.0));
 }
 
+const vec2 shadowOffsets[5] = vec2[5](
+										vec2(0.0, 1.0),
+		vec2(1.0, 0.0), vec2(0.0, 0.0), vec2(-1.0, 0.0),
+										vec2(0.0, -1.0)
+	);
+
 vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct lightMap, float translucent){
 
 		vec4 sworldposition = biasedShadows(position.sworldposition);
@@ -593,9 +596,13 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 
 		vec3 colorShading = vec3(0.0);
 		vec3 shading2 = vec3(0.0);
+		float noise = fract(sin(dot(texcoord.xy, vec2(18.9898f, 28.633f))) * 4378.5453f) * 60.0;
+		mat2 noiseM = mat2(cos(noise), -sin(noise),
+	                     sin(noise), cos(noise));
 
 		float diffthresh = pow(distortFactor, 4.0)/(4096 * 0.75) * tan(acos(max(NdotL,0.0))) + pow(max(length(position.fragposition),0.0),0.25) / 2048 * 0.5;
 		diffthresh = mix(diffthresh , 0.0003, translucent);
+	float displace = 0.0001*tan(acos(dot(normal, lightVector)));
 		if (max(abs(sworldposition.x),abs(sworldposition.y)) < 0.99) {
 
 			if (NdotL > 0.0 || translucent > 0.9) {
@@ -609,14 +616,14 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 
 				#ifdef SHADOW_FILTER
 
-					for (int i = 0; i < 60; i++){
+					for (int i = 0; i < 5; i++){
 
-						shading += shadow2D(shadowtex0,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).x;
-						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).r;
+						shading += shadow2D(shadowtex0,vec3(sworldposition.st + shadowOffsets[i]  *noiseM * (1.5/2048) , sworldposition.z - displace)).x;
+						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st + shadowOffsets[i] *step *noiseM , sworldposition.z - displace)).r;
 
 					#ifdef COLOURED_SHADOWS
 
-						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).rgb;
+						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st + shadowOffsets[i] *step, sworldposition.z - displace)).rgb;
 					#endif
 
 					weight++;
@@ -631,14 +638,11 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 
 				#endif
 
-
 				#ifndef SHADOW_FILTER
 						shading += shadow2D(shadowtex0,vec3(sworldposition.st, sworldposition.z - diffthresh)).x;
-
 						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st, sworldposition.z - diffthresh)).r;
-
-				#ifdef COLOURED_SHADOWS
-						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st, sworldposition.z - diffthresh)).rgb;
+						#ifdef COLOURED_SHADOWS
+							colorShading += shadow2D(shadowcolor,vec3(sworldposition.st, sworldposition.z - diffthresh)).rgb;
 						#endif
 				#endif
 
@@ -845,7 +849,7 @@ vec3 getSaturation(vec3 color, float saturation)
 }
 
 vec3 nightDesaturation(vec3 inColor){
-	float amount =  1*(pow(1-torch_lightmap1, 50.0)*(pow(1-getHandLight(hand, position),20.0)));
+	float amount =  1*(pow(1-torch_lightmap, 50.0)*(pow(1-getHandLight(hand, position),20.0)));
 	vec3 nightColor = vec3(0.25, 0.35, 0.7)/2;
 
 	float saturation = 0.0;
@@ -1022,7 +1026,7 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 
 			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*pow(visibility, 4.0)*bouncefactor;
+			vec3 sky_light = (SHADOW_DARKNESS*TimeNoon)*pow(ambient_color*(1-TimeMidnight)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.8)*pow(visibility, 4.0)*bouncefactor;
 
 			//Add all light elements together
 			return (((sky_light+0.0005) * (0.1) + shading.torchmap) + Sunlight_lightmap +  shading.sss * Sunlight_lightmap * 0.5) * shading.ao;
