@@ -31,6 +31,7 @@
 
 const float PI = 3.1415927;
 
+varying float distance;
 varying vec4 color;
 varying vec2 lmcoord;
 varying float mat;
@@ -285,4 +286,9 @@ mat3 tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
 
 	dist = 0.0;
 	dist = sqrt(dot(gl_ModelViewMatrix * gl_Vertex,gl_ModelViewMatrix * gl_Vertex));
+
+  vec4 locposition = gl_ModelViewMatrix * gl_Vertex;
+
+  distance = sqrt(locposition.x * locposition.x + locposition.y * locposition.y + locposition.z * locposition.z);
+
 }

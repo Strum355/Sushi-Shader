@@ -1,21 +1,13 @@
 #version 120
 #extension GL_ARB_shader_texture_lod : enable
 
-#define MAX_COLOR_RANGE 48.0 //[1.0 2.0 4.0 6.0 12.0 24.0 48.0 96.0]
+#define MAX_COLOR_RANGE 24.0 //[1.0 2.0 4.0 6.0 12.0 24.0 48.0 96.0]
 
 //disabling is done by adding "//" to the beginning of a line.
 
 //***************************ADJUSTABLE VARIABLES***************************//
 //***************************ADJUSTABLE VARIABLES***************************//
 //***************************ADJUSTABLE VARIABLES***************************//
-
-//***************************VISUALS***************************//
-
-//#define LENS_EFFECTS
-	#define LENS_STRENGTH 0.25
-	//#define DIRTY_LENS
-
-
 //***************************BLOOM***************************//
 
 #define BLOOM
@@ -145,23 +137,27 @@ float gen_circular_lens(vec2 center, float size) {
 
 #ifdef RAIN_DROP
 float waterDrop (vec2 tc) {
-	const float lifetime = 8.0;		//water drop lifetime in seconds
+	const float lifetime = 15.0;		//water drop lifetime in seconds
 
 	float ftime = frameTimeCounter*2.0/lifetime;
 	vec2 drop = vec2(0.0,fract(frameTimeCounter/20.0));
 
-	float gen = 1.0-fract((ftime+0.5)*0.5);
+	float gen = 1.0-fract((ftime+0.5)*0.1);
 	vec2 pos = (noisepattern(vec2(-0.94386347*floor(ftime*0.5+0.25),floor(ftime*0.5+0.25))))*0.8+0.1 - drop;
   float rainlens = gen_circular_lens(fract(pos),0.04)*gen*rainStrength;
 	gen = 1.0-fract((ftime+1.0)*0.5);
 	pos = (noisepattern(vec2(0.9347*floor(ftime*0.5+0.5),-0.2533282*floor(ftime*0.5+0.5))))*0.8+0.1- drop;
+
 	rainlens += gen_circular_lens(fract(pos),0.023)*gen*rainStrength;
 	gen = 1.0-fract((ftime+1.5)*0.5);
 	pos = (noisepattern(vec2(0.785282*floor(ftime*0.5+0.75),-0.285282*floor(ftime*0.5+0.75))))*0.8+0.1- drop;
+
 	rainlens += gen_circular_lens(fract(pos),0.03)*gen*rainStrength;
 	gen =  1.0-fract(ftime*0.5);
 	pos = (noisepattern(vec2(-0.347*floor(ftime*0.5),0.6847*floor(ftime*0.5))))*0.8+0.1- drop;
+
 	rainlens += gen_circular_lens(fract(pos),0.05)*gen*rainStrength;
+
 	rainlens *= clamp((eyeBrightnessSmooth.y-220)/15.0,0.0,1.0);
 
 	return rainlens*5;
@@ -346,28 +342,6 @@ vec3 calcExposure(vec3 color) {
 }
 
 
-
-#ifdef DIRTY_LENS
-float getDirtyLensPattern(vec2 Pos) {
-
-	vec2 coord = (Pos.xy);
-
-	float Lens = texture2D(noisetex,(coord)/2).x;
-	Lens += texture2D(noisetex,(coord)).x/2;
-	Lens += texture2D(noisetex,(coord)*2).x/4;
-	Lens += texture2D(noisetex,(coord)*4).x/8;
-	Lens += texture2D(noisetex,(coord)).x/2;
-	Lens += texture2D(noisetex,(coord)*2).x/4;
-	Lens += texture2D(noisetex,(coord)*4).x/8;
-
-	float strength = max(Lens-1.6,0.0);
-	float dL = 0.5;
-	float L = (1.0 - (pow(dL,strength)));
-
-	return L;
-}
-#endif
-
 /*
 float getShine(vec2 Pos, vec2 lP) {
 
@@ -412,246 +386,6 @@ vec3 getExposure(vec3 color){
 }
 
 
-vec3 robobo1221sTonemap(vec3 color){
-
-	float a = BRIGHTNESS;
-	float b = GAMMA;
-	float c = CONTRAST;
-
-	vec3 x = color - 0.04;
-	vec3 cout = ((3.8 * x + 0.2 * a) / (3.7 * x + 0.6));
-		cout = pow(cout, vec3(b * c)) * c;
-
-	return cout;
-}
-
-
-#ifdef LENS_EFFECTS
-
-	void getLensFlare(inout vec3 color){
-		float time = float(worldTime);
-		float transition_fading = 1.0-(clamp((time-12000.0)/300.0,0.0,1.0)-clamp((time-13000.0)/300.0,0.0,1.0) + clamp((time-22800.0)/200.0,0.0,1.0)-clamp((time-23400.0)/200.0,0.0,1.0));
-
-			vec3 lightVector;
-		if (worldTime < 12700 || worldTime > 23250) {
-			lightVector = normalize(sunPosition);
-		} else {
-			lightVector = normalize(moonPosition);
-		}
-
-		vec2 lightPos = getLightPos();
-		vec4 tpos = getTpos();
-
-		float xdist = abs(lightPos.x-Tc.x);
-		float ydist = abs(lightPos.y-Tc.y);
-		float xydist = distance(lightPos.xy,Tc.xy);
-
-		float distof = min(min(1.0-lightPos.x,lightPos.x),min(1.0-lightPos.y,lightPos.y));
-		float fading = clamp(1.0-step(distof,0.1)+pow(distof*10.0,5.0),0.0,1.0);
-
-		float sunvisibility = min(texture2D(gcolor,vec2(0.0)).a*2.5,1.0) * (1.0-rainStrength*0.9) * fading * transition_fading;
-
-		float truepos = 1-clamp(lightVector.z/abs(lightVector.z),0.0,1.0);
-
-		float sun = sunvisibility;
-		float h = TimeMidnight;
-		float r = rainStrength;
-		float uW = isEyeInWater;
-
-		float visibility = max(pow(max(1.0 - smoothCircleDist(1)/.75,.1),2)-.1,0);
-
-		float visibility2 = max(pow(max(1.0 - smoothCircleDist(1)/.7,.1),2)-.1,0);
-		float visibility3 = max(pow(max(1.0 - smoothCircleDist(1)/.2,.1),2)-.1,0);
-
-		float ringshine = getShine2(normalize(Tc.st - lightPos.st),1.0,0.15);
-
-		float sunCenter = (1/pow(clamp(distance(vec2(0.5),(sunPosition.st))/100.0 * truepos * (1-sunvisibility) + 0.5,0.0,1.0),1.0));
-
-			if (sun < 0.0) {
-				} else if (isEyeInWater > 0.9) {
-					} else if (rainStrength > 0.9) {
-						} else {
-
-							float anamorphic_lens = exp(-ydist*ydist/(0.0001*(1-(visibility))))*exp(-xdist*xdist/0.1)*sun*(1-TimeMidnight*0.9) * (1-rainStrength);
-							float anamorphic_lens2 = exp(-ydist*ydist/(0.00001))*exp(-xdist*xdist/0.1)*sun*(1-TimeMidnight*0.9) * (1-rainStrength) * visibility;
-							float glow = exp(-ydist*ydist/0.06)*exp(-xdist*xdist/0.06)*sun * (1-rainStrength);
-
-							color.rgb += (vec3(0.0,0.2,1.0)*anamorphic_lens*LENS_STRENGTH)* truepos;
-							color.rgb += (vec3(1+sunlight)*clamp(anamorphic_lens2, 0.0, 0.9)*LENS_STRENGTH)* truepos;
-
-							//glow
-							//color.rgb += (vec3(sunlight*2)*glow*(1-TimeNoon)*LENS_STRENGTH)* truepos;
-
-							//dirty lens
-							#ifdef DIRTY_LENS
-							color += ((((sunlight+ambient_color)*8+2)*(getDirtyLensPattern(Tc.xy/25)*visibility)*sun)*truepos)*0.15*(1-r)*(1-TimeNoon*0.75)*(1-TimeMidnight*0.9)*(1-TimeSunrise*0.5)*(1-TimeSunset*0.5);
-							#endif
-
-							//fake rays
-							//color.rgb += color.rgb*(((sunlight+ambient_color)*4+8)*clamp(getShine(normalize(Tc.xy - lightPos.xy), lightPos/150),0.0, 0.9)*visibility2*(1.0-visibility3)) * sun * truepos * (1-TimeMidnight) * (1-r);
-
-							////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-							vec3 c1 = vec3(0.1,0.3,0.4)/3 * (1-h) * (1-uW) * LENS_STRENGTH * truepos, c2 = vec3(0.0,0.0,0.02) * (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-							vec3 c3 = vec3(0.0,0.06,0.06) * (1-h) * (1-uW) * LENS_STRENGTH * truepos, c4 = vec3(0.0,0.4,0.2) * (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-							vec3 c5 = vec3(0.0,0.07,0.2) 	* (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-
-							vec3 c6 = vec3(0.05,0.25,1)/4 * h * LENS_STRENGTH * truepos;
-
-							vec3 cr = vec3(2,.0,.0)*4*(1-(1-land)*0.5) * (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-							vec3 cb = vec3(.0,.0,2)*4*(1-(1-land)*0.5) * (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-							vec3 cg = vec3(.0,2,.0)*4*(1-(1-land)*0.5) * (1-h) * (1-uW) * LENS_STRENGTH * truepos;
-
-							//day
-
-							//front
-
-							color += genlens(c3*4, 0.246, 0.032*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.273, 0.025*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.282, 0.020*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.291, 0.015*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.3, 0.013*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.31, 0.012*1*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*4, 0.32, 0.011*1*sunCenter, tpos, sun * (1-r),10.0);
-
-
-							color += genlens(c1, -0.255, 0.014*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.26, 0.014*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.265, 0.014*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.27, 0.015*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.275, 0.016*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.28, 0.017*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.285, 0.018*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.29, 0.019*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.295, 0.021*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.3, 0.025*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.305, 0.029*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.315, 0.034*sunCenter, tpos, sun * (1-r),10.0);
-
-							color += genlens(c2*2, -0.300, 0.14*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c3*2, -0.320, 0.14*sunCenter, tpos, sun * (1-r),10.0);
-
-							color += genlens(c1, -0.44, 0.008*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c1, -0.45, 0.01*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c4, -0.46, 0.013*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c4, -0.47, 0.015*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c4, -0.48, 0.018*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c4, -0.49, 0.024*sunCenter, tpos, sun * (1-r),10.0);
-							color += genlens(c4, -0.50, 0.03*sunCenter, tpos, sun * (1-r),10.0);
-
-							color += genlens(c2*3, -0.55, 0.1*sunCenter, tpos, sun * (1-r),10.0);
-
-							color += genlens(c3+c5*5, -1.0, 0.02*sunCenter, tpos, sun * (1-r),10.0);
-
-							//moonshapes
-
-							//////////////////////////////////////////////////////////////
-
-							vec3 L1 = genlens(c3, -0.90, 0.31/2*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L2 = genlens(c3, -1.00, 0.30/2*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 mL = max(L2 - L1, 0.0);
-							color += mL * sun * (1.0-rainStrength*1.0)*16;
-
-							//////////////////////////////////////////////////////////////
-
-							vec3 L11 = genlens(cr+(cg*0.5), -0.80, 0.11*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L21 = genlens(cr+(cg*0.5), -0.86, 0.10*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 mL0 = max(L21 - L11, 0.0);
-							color += mL0 * sun * (1.0-rainStrength*1.0)*0.2;
-
-							//////////////////////////////////////////////////////////////
-
-							vec3 L3 = genlens(cr, -0.9, 0.505/3*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L3s = genlens(cr, -0.91, 0.50/3*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 L4 = genlens(cg, -0.92, 0.505/3*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L4s = genlens(cg, -0.93, 0.50/3*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 L5 = genlens(cb, -0.94, 0.505/3*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L5s = genlens(cb, -0.95, 0.50/3*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 mL1 = max(L3s - L3, 0.0);
-							vec3 mL2 = max((L4s - L4) - mL1, 0.0);
-							vec3 mL3 = max((L5s - L5) - mL2, 0.0);
-
-							color += mL1 * sun * (1.0-rainStrength*1.0)*2;
-							color += mL2 * sun * (1.0-rainStrength*1.0)*2;
-							color += mL3 * sun * (1.0-rainStrength*1.0)*2;
-
-							//////////////////////////////////////////////////////////////
-
-							vec3 L6 = genlens(cr, 0.20, 0.31*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L6s = genlens(cr, 0.18, 0.30*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 L7 = genlens(cg, 0.16, 0.30*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L7s = genlens(cg, 0.14, 0.29*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 L8 = genlens(cb, 0.12, 0.29*sunCenter, tpos, sun * (1-r),10.0);
-							vec3 L8s = genlens(cb, 0.1, 0.28*sunCenter, tpos, sun * (1-r),10.0);
-
-							vec3 mL4 = max(L6s - L6, 0.0);
-							vec3 mL5 = max(L7s - L7, 0.0);
-							vec3 mL6 = max(L8s - L8, 0.0);
-
-							color += mL4 * sun * (1.0-rainStrength*1.0)*4;
-							color += mL5 * sun * (1.0-rainStrength*1.0)*4;
-							color += mL6 * sun * (1.0-rainStrength*1.0)*4;
-
-							//////////////////////////////////////////////////////////////
-
-							vec3 L9 = genlensFloatingAna((c3*8)+(cb*.5), -1.40, 0.025*sunCenter, 1.7, tpos, sun * (1-r)) * 2;
-							vec3 L9s = genlens((c3*8)+(cb*.5), 1.5, 2.50*sunCenter, tpos, sun * (1-r),10.0) * 2;
-
-							vec3 mL7 = max(L9 - L9s, 0.0);
-							color += mL7 * sun * (1.0-rainStrength*1.0)*4;
-
-							//////////////////////////////////////////////////////////////
-
-
-							vec3 aL1 = genlens(cg + cb, -0.9 / 3, 0.50/6, tpos, sun * (1-r),10.0);
-							vec3 aL1s = genlens(cg + cb, -0.94 / 3, 0.505/6, tpos, sun * (1-r),10.0);
-
-							vec3 amL2 = max(aL1 - aL1s, 0.0);
-
-							vec3 aL2 = genlens(cr + cg, -0.9 / 5, 0.50/7, tpos, sun * (1-r),10.0);
-							vec3 aL2s = genlens(cr + cg, -0.94 / 5, 0.505/7, tpos, sun * (1-r),10.0);
-
-							vec3 amL3 = max(aL2 - aL2s, 0.0);
-
-							color += amL2 * sun * (1.0-rainStrength*1.0)*1.5;
-							color += amL3 * sun * (1.0-rainStrength*1.0)*3;
-
-							//////////////////////////////////////////////////////////////
-
-							//back
-
-							//color += genlensFloatingAna(vec3(0.0,0.1,0.5),  1.95, 0.01, 0.1, tpos, sun * (1-r) * (1-h) * (1-uW) * truepos);
-							//color += genlensFloatingAna(vec3(0.0,0.1,0.5),  1.65, 0.01, 0.1, tpos, sun * (1-r) * (1-h) * (1-uW) * truepos);
-							//color += genlensFloatingAna(vec3(0.0,0.1,0.5),  1.25, 0.01, 0.1, tpos, sun * (1-r) * (1-h) * (1-uW) * truepos);
-
-							//rings
-							float ringsSize = 0.25;
-							float ringsExp = 0.25 * ringshine;
-							float ringsSm = 12.5;
-
-							color += genRingLens(cr*5*ringsExp, 1.0, 1.0*ringsSize*sunCenter, 1.0*ringsSize*sunCenter/1.05, tpos, sun * (1-r),ringsSm) * 0.5;
-							color += genRingLens(cg*5*ringsExp, 1.0, 1.05*ringsSize*sunCenter, 1.05*ringsSize*sunCenter/1.05, tpos, sun * (1-r),ringsSm) * 0.5;
-							color += genRingLens(cb*5*ringsExp, 1.0, 1.1*ringsSize*sunCenter, 1.1*ringsSize*sunCenter/1.05, tpos, sun * (1-r),ringsSm) * 0.5;
-
-
-							//night
-							color += genlens(c6, -0.4, 0.01, tpos, sun * (1-r),10.0);
-							color += genlens(c6, -0.9, 0.05, tpos, sun * (1-r),10.0);
-							color += genlens(c6, -1.7, 0.1, tpos, sun * (1-r),10.0);
-
-
-						}
-
-	}
-#endif
-
 #ifdef BLOOM
 
 	vec3 getBloom(in vec2 bCoord){
@@ -680,20 +414,20 @@ vec4 nvec4(vec3 pos) {
     return vec4(pos.xyz, 1.0);
 }
 
-void TonemapVorontsov(inout vec3 color) {
-	 float tonemapContrast 		= 1.4;
-	 float tonemapSaturation 	= 1.7;
-	 float tonemapDecay			= 21000.0;
-	 float tonemapCurve			= 0.50;
+//collab tonemap between noah (me) and joey (dotmodded)
+void NJTonemap(inout vec3 color){
+	color *= 1.2;
+	// a b g c d
+	color = color/((color+0.5)+(0.06-color+0.1)/(0.13+color)+0.75);
+	color = pow(color, vec3(1.0/2.2));
+	//color = 1-color;
+}
 
-	color *= 2.0;
-	vec3 colorN = normalize(color.rgb);
-	vec3 clrfr = color.rgb/colorN.rgb;
-	     clrfr = pow(clrfr.rgb, vec3(tonemapContrast));
-	colorN.rgb = pow(colorN.rgb, vec3(tonemapSaturation));
-	color.rgb = clrfr.rgb * colorN.rgb;
-	color.rgb = (color.rgb * (1.0 + color.rgb/tonemapDecay))/(color.rgb + tonemapCurve);
-	color.rgb = pow(color.rgb, vec3(1.0f / 2.2f));
+void NoahsTonemap1(inout vec3 color){
+	//color *= 2;
+	color = color/((color+0.5)+(0.06-color+0.03)/(0.05+color)+0.75);
+	color = pow(color, vec3(1.0/2.2));
+	//color = 1-color;
 }
 
 //VOID MAIN//
@@ -729,7 +463,7 @@ void main() {
 
 vec3 color;
 
-if(isIce>0.9 ){
+/*if(isIce>0.9 ){
 		 vec4 blendWeights = vec4(1.0, 0.5, 0.25, 0.125);
 		 blendWeights = pow(blendWeights, vec4(visibility));
 
@@ -740,9 +474,9 @@ if(isIce>0.9 ){
 		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.z * MAX_COLOR_RANGE;
 		 color += texture2DLod(gcolor,Tc.st,2).rgb  * blendWeights.w * MAX_COLOR_RANGE;
 		 color /= blendWeightsTotal;
-} else {
+} else {*/
 	color = texture2D(gcolor,Tc.st).rgb  * MAX_COLOR_RANGE;
-}
+//}
 
 
 
@@ -785,7 +519,9 @@ if(isIce>0.9 ){
 
 	if (isEyeInWater > 0.9) color.rgb = calcExposure(color);
 
-	TonemapVorontsov(color);
+	NJTonemap(color);
+
+	//color = texture2D(composite, texcoord.st/2).rgb*48;
 
 	gl_FragColor = vec4(color, 1.0);
 }
