@@ -58,7 +58,7 @@
 
 const bool 		gcolorMipmapEnabled 	= true; //gcolor texture mipmapping
 const bool 		gaux1MipmapEnabled 	= true; //gaux1 texture mipmapping
-const bool 		gaux4MipmapEnabled 	= true; //gaux1 texture mipmapping
+const bool 		gaux4MipmapEnabled 	= true; //gaux4 texture mipmapping
 
 
 //don't touch these lines if you don't know what you do!
@@ -328,7 +328,7 @@ return sunIntensity * max(0.0, 1.0 - exp(-((cutoffAngle - acos(zenithAngleCos))/
 }
 
 float A = 0.80;
-float B = 0.50;
+float B = 0.20;
 float C = 0.10;
 float D = 0.20;
 float E = 0.03;
@@ -771,7 +771,7 @@ float getnoise(vec2 pos) {
 		float eBS = mix(1.0,0.0,(pow(eyeBrightnessSmooth.y / 240.0f, 1.0f)));
 
 		float Glow = pow(max(dot(normalize(fragpos),lightVector),0.0),2.5*15);
-		float vlGlow = (1-Glow*-(2.5*(1+TimeNoon * 5.0)*(1+(TimeSunrise + TimeSunset)*15.)*(1-eBS))) * 0.1;
+		float vlGlow = (Glow*-(2.5*(1+TimeNoon * 5.0)*(1+(TimeSunrise + TimeSunset)*15.)*(1-eBS))) * 0.1;
 
 		float atmosphere = pow(max(dot(normalize(fragpos),lightVector),0.0),2.0);
 
@@ -799,7 +799,7 @@ float getnoise(vec2 pos) {
 			if(any(greaterThan(VolumeColour, vec3(0.0)))) vlcolor *= VolumeColour * 4.0;
 
 			vlcolor = pow(mix(pow(max(color,0.0), vec3(2.2)), pow(vlcolor, vec3(2.2)), VolumeSample * 0.2 * 0.1 * 0.5 * VL_MULT * (1.0 - isEyeInWater) * (1.0 - rainx) * transition_fading),vec3(0.4545));
-			return vlcolor;
+			return vec3(1.0);
 	}
 #endif
 
@@ -1543,7 +1543,7 @@ void main() {
 	#endif
 
 	#ifdef VOLUMETRIC_LIGHT
-		color.rgb = vlColor(vlFogColor, color.rgb, refractionTC.st, fragpos2);
+	//	color.rgb = vlColor(vlFogColor, color.rgb, refractionTC.st, fragpos2);
 	#endif
 
 	float depth_diff = pow(clamp(sqrt(dot(fragpos,fragpos)) * 0.01,0.0,1.0), 0.05);

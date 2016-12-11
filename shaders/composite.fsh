@@ -65,6 +65,7 @@ const int 		noiseTextureResolution  = 1024;
 const int		RGBA16 					= 1;
 const int		RGB16 					= 1;
 const int		RGBA32F					= 1;
+const int 		RGBA8 					= 1;
 
 const int		gcolorFormat			= RGBA32F;
 const int		gaux4Format			    = RGBA16;
@@ -131,8 +132,8 @@ float comp = 1.0-near/far/far;			//distance above that are considered as sky
 	float TimeSunset   = ((clamp(timefract, 9000.0f, 12000.0f) - 9000.0f) / 3000.0f) - ((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f);
 	float TimeMidnight = ((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f) - ((clamp(timefract, 23000.0f, 24000.0f) - 23000.0f) / 1000.0f);
 
-	float time = float(worldTime);
-	float transition_fading = 1.0-(clamp((time-12000.0)/300.0,0.0,1.0)-clamp((time-13000.0)/300.0,0.0,1.0) + clamp((time-22000.0)/200.0,0.0,1.0)-clamp((time-23400.0)/200.0,0.0,1.0));
+	//float time = float(worldTime);
+float transition_fading = 1.0-(clamp((timefract-12000.0)/300.0,0.0,1.0)-clamp((timefract-13000.0)/300.0,0.0,1.0) + clamp((timefract-22800.0)/200.0,0.0,1.0)-clamp((timefract-23400.0)/200.0,0.0,1.0));
 
 float rainx = clamp(rainStrength, 0.0, 0.997);
 
@@ -262,6 +263,27 @@ vec3 torchcolor = vec3(TORCH_COLOR)*eyeAdapt*0.1*TORCH_INTENSITY;
 vec3 torchcolor2 = vec3(TORCH_COLOR2)*eyeAdapt*TORCH_INTENSITY;
 
 vec3 specular = texture2D(gaux3,texcoord.xy).rgb;
+
+mat2 time = mat2(vec2(
+				((clamp(timefract, 23000.0f, 25000.0f) - 23000.0f) / 1000.0f) + (1.0f - (clamp(timefract, 0.0f, 2000.0f)/2000.0f)),
+				((clamp(timefract, 0.0f, 2000.0f)) / 2000.0f) - ((clamp(timefract, 9000.0f, 12000.0f) - 9000.0f) / 3000.0f)),
+
+				vec2(
+				((clamp(timefract, 9000.0f, 12000.0f) - 9000.0f) / 3000.0f) - ((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f),
+				((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f) - ((clamp(timefract, 23000.0f, 24000.0f) - 23000.0f) / 1000.0f))
+
+);
+vec3 sunColor = vec3(1.0,0.7,0.3) * 0.7 * time[0].x * (1.0-rainStrength) +		//Sunrise
+								vec3(1.0,1.0,1.0) * 1.0 * time[0].y * (1.0-rainStrength) +		//Noon
+								vec3(1.0,0.5,0.2) * 0.7 * (time[1].x + time[1].y) * (1.0-rainStrength) +		//Sunset
+								//vec3(0.1,0.11,0.15) * 1.0 * (1.0-rainStrength) +	//Midnight
+								vec3(0.1, 0.1, 0.1) * 0.3 * rainStrength;						//Rain
+
+vec3 skyColor = vec3(0.3,0.4,0.8) * 0.2 * time[0].x * (1.0-rainStrength) +		//Sunrise
+								vec3(0.25,0.5,0.80) * 0.3 * time[0].y * (1.0-rainStrength) +		//Noon
+								vec3(0.3,0.4,0.8) * 0.2 * time[1].x * (1.0-rainStrength) +		//Sunset
+								vec3(0.13,0.15,0.2) * 0.01 * time[1].y * (1.0-rainStrength) +	//Midnight
+								vec3(0.3,0.3,0.3) * 0.1 * rainStrength;							//Rain
 
 const vec2 shadow_offsets[60] = vec2[60]  (  vec2(0.06120777f, -0.8370339f),
 vec2(0.09790099f, -0.5829314f),
@@ -970,5 +992,5 @@ void main() {
 
 /* DRAWBUFFERS:07 */
 	gl_FragData[0] 						= vec4(color / MAX_COLOR_RANGE, shading.shadows1);
-	gl_FragData[1]						= vec4(vlColour, volumeRays);
+	//gl_FragData[1]						= vec4(vlColour, volumeRays);
 }

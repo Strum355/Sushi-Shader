@@ -416,16 +416,9 @@ vec4 nvec4(vec3 pos) {
 
 //collab tonemap between noah (me) and joey (dotmodded)
 void NJTonemap(inout vec3 color){
-	color *= 1.2;
+	//color *= 1.2;
 	// a b g c d
 	color = color/((color+0.5)+(0.06-color+0.1)/(0.13+color)+0.75);
-	color = pow(color, vec3(1.0/2.2));
-	//color = 1-color;
-}
-
-void NoahsTonemap1(inout vec3 color){
-	//color *= 2;
-	color = color/((color+0.5)+(0.06-color+0.03)/(0.05+color)+0.75);
 	color = pow(color, vec3(1.0/2.2));
 	//color = 1-color;
 }
