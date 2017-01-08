@@ -2,15 +2,15 @@
 #extension GL_ARB_shader_texture_lod : enable
 
 #define NORMAL_MAP_MAX_ANGLE 0.5
-#define POM
-#define POM_MAP_RES 128.0
-#define POM_DEPTH 1.0 //[0.5 1.0 1.5 2.0 2.5 3.0]
-#define OCCLUSION_POINTS 32 //[8 16 32 64 128 256 512 1024]
+#define PARALLAX
+#define POM_MAP_RES 256.0
+#define POM_DEPTH 1.0 //[0.1 0.25 0.5 1.0 1.5 2.0 2.5 3.0] Depth of terrain parallax. Higher values may look bad with some resource packs
+#define OCCLUSION_POINTS 128 //[8 16 32 64 128 256 512 1024]
 
 /* Here, intervalMult might need to be tweaked per texture pack.
    The first two numbers determine how many samples are taken per fragment.  They should always be the equal to eachother.
    The third number divided by one of the first two numbers is inversely proportional to the range of the height-map. */
-const vec3 intervalMult = vec3(1.0, 1.0, 1.0/(POM_DEPTH / 8.0))/POM_MAP_RES * 64 / OCCLUSION_POINTS;
+	 const vec3 intervalMult = vec3(1.0, 1.0, 1.0/(POM_DEPTH))/ OCCLUSION_POINTS;
 
 const float MAX_OCCLUSION_DISTANCE = 22.0;
 const float MIX_OCCLUSION_DISTANCE = 18.0;
@@ -66,7 +66,7 @@ void main() {
 	vec2 adjustedTexCoord;
 	adjustedTexCoord = texcoord.st;
 
-	#ifdef POM
+	#ifdef PARALLAX
 	if (dist < MAX_OCCLUSION_DISTANCE) {
 		if ( viewVector.z < 0.0 && readNormal(vtexcoord.st).a < 0.99 && readNormal(vtexcoord.st).a > 0.01)
 	{

@@ -31,22 +31,19 @@
 
 const float PI = 3.1415927;
 
-varying float distance;
 varying vec4 color;
 varying vec2 lmcoord;
 varying float mat;
 varying vec4 texcoord;
 varying vec4 vtexcoordam; // .st for add, .pq for mul
 varying vec4 vtexcoord;
-
+varying vec4 vertexPos;
 varying vec3 tangent;
 varying vec3 normal;
 varying vec3 binormal;
-varying vec4 vertexPos;
-varying vec3 viewDir;
+varying vec3 viewVector;
 varying vec3 wpos;
 varying float dist;
-varying float islava;
 
 varying vec3 sunlight;
 varying vec3 moonlight;
@@ -59,9 +56,8 @@ varying vec3 moonVec;
 varying vec3 upVec;
 varying float sunVisibility;
 varying float moonVisibility;
+varying float islava;
 varying mat3 tbnMatrix;
-varying vec3 fragposition;
-
 attribute vec4 mc_Entity;
 attribute vec4 mc_midTexCoord;
 
@@ -150,8 +146,9 @@ void main() {
 	vtexcoordam.st  = min(texcoord.st,midcoord-texcoordminusmid);
 	vtexcoord.st    = sign(texcoordminusmid) * 0.5 + 0.5;
 	mat = 1.0f;
+  islava = 0.0;
 	float istopv = 0.0;
-  islava = 0;
+
 	float underCover = lmcoord.t;
 
 	float dnrsMult = (1.0 + rainStrength * 0.5) * (1.0 - TimeMidnight * 0.5) * 2.0;
@@ -217,23 +214,20 @@ void main() {
 	float movemult = 0.0;
 
 	if ( mc_Entity.x == ENTITY_LAVAFLOWING || mc_Entity.x == ENTITY_LAVASTILL ) {
-			mat = 0.4;
+	//		mat = 0.4;
       islava = 1.0;
 			position.xyz += calcWaterMove(worldpos.xyz) * 0.25;
 			}
 	if ( mc_Entity.x == ENTITY_LILYPAD ) {
 			position.xyz += calcWaterMove(worldpos.xyz);
-			mat = 0.4;
+		//	mat = 0.4;
 			}
 
 
-	#ifdef TRANSLUCENT_BLOCKS
-	mat = 0.4;
-	#else
+
 	if (mc_Entity.x == ENTITY_CARROT || mc_Entity.x == ENTITY_COBWEB || mc_Entity.x == ENTITY_DANDELION || mc_Entity.x == ENTITY_DEAD_BUSH || mc_Entity.x == ENTITY_FIRE || mc_Entity.x == ENTITY_LEAVES || mc_Entity.x == ENTITY_LEAVES2
 	 || mc_Entity.x == ENTITY_LILYPAD || mc_Entity.x == ENTITY_NETHER_WART || mc_Entity.x == ENTITY_NEWFLOWERS || mc_Entity.x == ENTITY_POTATO || mc_Entity.x == ENTITY_ROSE || mc_Entity.x == ENTITY_TALLGRASS || mc_Entity.x == ENTITY_VINES
 	 || mc_Entity.x == ENTITY_WHEAT || mc_Entity.x == 83.0 || mc_Entity.x == 39.0 || mc_Entity.x == 40.0)mat = 0.4;
-	#endif
 
 	if (mc_Entity.x == 174.0) {
 	mat = 0.23;
@@ -242,6 +236,7 @@ void main() {
 	if (mc_Entity.x == 50.0 || mc_Entity.x == 62.0 || mc_Entity.x == 91.0 || mc_Entity.x == 89.0 || mc_Entity.x == 124.0 || mc_Entity.x == 138.0 || mc_Entity.x == 169.0) mat = 0.6;
 
 	if (mc_Entity.x == ENTITY_LAVAFLOWING || mc_Entity.x == ENTITY_LAVASTILL) mat = 0.53;
+  if (mc_Entity.x == 41) mat = 0.7;
 	/* re-rotate */
 
 	/* projectify */
@@ -279,16 +274,8 @@ void main() {
 								  tangent.y, binormal.y, normal.y,
 						     	  tangent.z, binormal.z, normal.z);
 
-
-	vertexPos = gl_Vertex;
+  vertexPos = gl_Vertex;
 	wpos = worldpos;
-    fragposition = vec3(gl_ModelViewMatrix * vec4(cameraPosition, 1.0));
-    viewDir = cameraPosition * tbnMatrix;
 
 	dist = sqrt(dot(gl_ModelViewMatrix * gl_Vertex,gl_ModelViewMatrix * gl_Vertex));
-
-  vec4 locposition = gl_ModelViewMatrix * gl_Vertex;
-
-  distance = sqrt(locposition.x * locposition.x + locposition.y * locposition.y + locposition.z * locposition.z);
-
 }

@@ -1,13 +1,10 @@
 #version 120
 
-#define BLOOM									//Makes glow effect on bright stuffs.
+	#define BLOOM									//Makes glow effect on bright stuffs.
 
-const float nightBloom = 3;
-const float dayBloom = 10;
+	const float nightBloom = 3;
+	const float dayBloom = 10;
 
-const int		RGBA32F					= 1;
-
-const int		compositeFormat			= RGBA32F;
 
 const bool gcolorMipmapEnabled = true;
 
@@ -26,7 +23,6 @@ float timefract = worldTime;
 float pw = 1.0/ viewWidth;
 float TimeMidnight = ((clamp(timefract, 12000.0, 12750.0) - 12000.0) / 750.0) - ((clamp(timefract, 23000.0, 24000.0) - 23000.0) / 1000.0);
 
-
 vec3 makeBloom(float lod,vec2 offset){
 
 	vec3 bloom = vec3(0.0);
@@ -35,7 +31,8 @@ vec3 makeBloom(float lod,vec2 offset){
 	if (coord.x > -0.1 && coord.y > -0.1 && coord.x < 1.1 && coord.y < 1.1){
 		for (int i = -7; i < 7; i++) {
 			for (int j = -7; j < 7; j++) {
-			vec2 bcoord = (texcoord.xy-offset+vec2(i,j)*pw*vec2(1.0,aspectRatio))*scale;
+			vec2 bcoord = (texcoord.xy-offset+vec2(i+1,j+1)*pw*vec2(1.0,aspectRatio))*scale;
+
 			float wg = pow((1.0-length(vec2(i,j))/8.0),3)*pow(0.5,0.5)*20.0;
 
 			if (wg > 0) bloom +=(pow(texture2D(gcolor,bcoord).rgb,vec3(2.2))*wg);
