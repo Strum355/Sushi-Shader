@@ -16,8 +16,9 @@ uniform sampler2D tex;
 void main() {
 
 	vec4 fragcolor = texture2D(tex,texcoord.xy) * color;
-	
-	fragcolor.rgb = mix(vec3(0.0), mix(vec3(0.0),fragcolor.rgb, fragcolor.a), isTransparent);
+	if (isTransparent < 0.9 || fragcolor.a > 0.8) fragcolor.rgb *= 0;
+
+	//fragcolor.rgb = mix(vec3(0.0), mix(vec3(0.0),fragcolor.rgb, fragcolor.a), isTransparent);
 
 	gl_FragData[0] = vec4(fragcolor);
 }

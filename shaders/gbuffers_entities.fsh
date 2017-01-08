@@ -30,7 +30,7 @@ void main() {
 	albedo.rgb = mix(albedo.rgb,vec3(1,0,0),float(entityHurt) * 0.003);
 	vec4 frag2 = vec4(normal*0.5+0.5, 1.0f);
 
-	float dirtest = 1.0;
+	float dirtest = 0.0;
 
 	if (worldTime < 12700 || worldTime > 23250) {
 		lightVector = normalize(sunPosition);
