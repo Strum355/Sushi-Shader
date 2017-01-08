@@ -1,9 +1,9 @@
 #version 120
 
 varying vec4 color;
-varying vec4 texcoord;
-
-uniform sampler2D texture;
+varying vec2 texcoord;
+varying vec2 lmcoord;
+varying vec3 normal;
 
 //////////////////////////////VOID MAIN//////////////////////////////
 //////////////////////////////VOID MAIN//////////////////////////////
@@ -13,8 +13,12 @@ uniform sampler2D texture;
 
 void main() {
 
-/* DRAWBUFFERS:5 */
+	texcoord = (gl_MultiTexCoord0).xy;
+	lmcoord = (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy;
 
-	vec4 tex = texture2D(texture, texcoord.xy)*color;
-	gl_FragData[0] = tex;
+	gl_Position = ftransform();
+
+	color = gl_Color;
+
+	normal = normalize(gl_NormalMatrix * gl_Normal);
 }

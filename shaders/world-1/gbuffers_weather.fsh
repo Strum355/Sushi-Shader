@@ -13,7 +13,7 @@ uniform sampler2D texture;
 
 void main() {
 
-/* DRAWBUFFERS:5 */
+/* DRAWBUFFERS:0 */
 
 	vec4 tex = texture2D(texture, texcoord.xy)*color;
 	gl_FragData[0] = tex;

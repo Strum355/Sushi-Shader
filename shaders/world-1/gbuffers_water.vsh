@@ -182,7 +182,4 @@ void main() {
 		mat = 0.95 ;
 		isIce = 1.0;
 	}
-	if(mc_Entity.x == 90){
-		mat = 0.98 ;
-	}
 }

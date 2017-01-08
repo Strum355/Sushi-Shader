@@ -22,11 +22,13 @@ const float bump_distance = 32.0;		//bump render distance: tiny = 32, short = 64
 const float pom_distance = 32.0;		//POM render distance: tiny = 32, short = 64, normal = 128, far = 256
 const float fademult = 0.1;
 
+varying float islava;
 varying vec2 lmcoord;
 varying vec4 color;
 varying float mat;
 varying float dist;
-varying vec2 texcoord;
+varying vec3 wpos;
+varying vec4 texcoord;
 varying vec4 vtexcoordam; // .st for add, .pq for mul
 varying vec4 vtexcoord;
 
@@ -38,10 +40,12 @@ varying vec3 viewVector;
 uniform sampler2D texture;
 uniform sampler2D normals;
 uniform sampler2D specular;
-uniform vec3 sunPosition;
-uniform vec3 moonPosition;
-uniform int worldTime;
+uniform sampler2D noisetex;
 uniform float wetness;
+uniform float rainStrength;
+
+const float mincoord = 1.0/4096.0;
+const float maxcoord = 1.0-mincoord;
 
 vec2 dcdx = dFdx(vtexcoord.st*vtexcoordam.pq);
 vec2 dcdy = dFdy(vtexcoord.st*vtexcoordam.pq);
@@ -49,6 +53,16 @@ vec2 dcdy = dFdy(vtexcoord.st*vtexcoordam.pq);
 vec4 readTexture(in vec2 coord)
 {
 	return texture2DGradARB(texture,fract(coord)*vtexcoordam.pq+vtexcoordam.st,dcdx,dcdy);
+}
+
+float terrainH(vec2 posxz) {
+
+
+	vec2 coord = (posxz);
+
+	float noise = texture2DGradARB(noisetex,fract(coord.xy/50.0), dcdx, dcdy).x / 2;
+
+return noise;
 }
 
 vec4 readNormal(in vec2 coord)
@@ -63,6 +77,7 @@ vec4 readNormal(in vec2 coord)
 //////////////////////////////VOID MAIN//////////////////////////////
 
 void main() {
+
 	vec2 adjustedTexCoord;
 	adjustedTexCoord = texcoord.st;
 
@@ -72,51 +87,50 @@ void main() {
 	{
 		vec3 interval = viewVector.xyz * intervalMult;
 		vec3 coord = vec3(vtexcoord.st, 1.0);
-		for (int loopCount = 0;
-				(loopCount < MAX_OCCLUSION_POINTS) && (readNormal(coord.st).a < coord.p);
-				++loopCount) {
+		for (int loopCount = 0; (loopCount < MAX_OCCLUSION_POINTS) && (readNormal(coord.st).a < coord.p); ++loopCount) {
 			coord = coord+interval;
+		}
+		if (coord.t < mincoord) {
+			if (readTexture(vec2(coord.s,mincoord)).a == 0.0) {
+				coord.t = mincoord;
+				discard;
+			}
 		}
 		adjustedTexCoord = mix(fract(coord.st)*vtexcoordam.pq+vtexcoordam.st , adjustedTexCoord , max(dist-MIX_OCCLUSION_DISTANCE,0.0)/(MAX_OCCLUSION_DISTANCE-MIX_OCCLUSION_DISTANCE));
 	}
 
 	}
 	#endif
-	vec3 lightVector;
-
-	if (worldTime < 12700 || worldTime > 23250) {
-		lightVector = normalize(sunPosition);
-	}
-
-	else {
-		lightVector = normalize(moonPosition);
-	}
-
 
 
 		vec3 specularity = texture2DGradARB(specular, adjustedTexCoord, dcdx, dcdy).rgb;
-	float atten = 1.0-(specularity.b)*0.0;
+	float atten = 1.0-(specularity.g);
 
-	vec3 getNormal = normal;
-	vec4 frag2 = vec4(getNormal, 1.0f);
+	vec4 frag2 = vec4(normal, 1.0f);
 
-		vec3 bump = texture2DGradARB(normals, adjustedTexCoord, dcdx, dcdy).rgb;
+		vec3 bump2 = vec3((terrainH(wpos.xz + wpos.y)) * 0.2 * (rainStrength + float(mat > 0.22 && mat < 0.24) * 2.0));
 
-		float bumpmult = NORMAL_MAP_MAX_ANGLE*(1.0-wetness*lmcoord.t*0.8)*atten;
+		vec3 bump = texture2DGradARB(normals, adjustedTexCoord, dcdx, dcdy).rgb*2.0-1.0 * (1+ bump2);
+
+		float bumpmult = NORMAL_MAP_MAX_ANGLE*(1.0-wetness*lmcoord.t*0.25)*atten;
 
 		bump = bump * vec3(bumpmult, bumpmult, bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
-		mat3 tbnMatrix = mat3(tangent.x, binormal.x, getNormal.x,
-								  tangent.y, binormal.y, getNormal.y,
-						     	  tangent.z, binormal.z, getNormal.z);
+		mat3 tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
+								  tangent.y, binormal.y, normal.y,
+						     	  tangent.z, binormal.z, normal.z);
 
 			frag2 = vec4(normalize(bump * tbnMatrix) * 0.5 + 0.5, 1.0);
+	vec4 c = mix(color,vec4(1.0),float(mat > 0.58 && mat < 0.62));		//fix weird lightmap bug on emissive blocks
+	vec4 colorAlbedo = texture2DGradARB(texture, adjustedTexCoord, dcdx, dcdy);
 
-
-
+	if(islava > 0.9){
+	float ec = clamp(pow(length(colorAlbedo.rgb),1.4),0,2.2);
+		colorAlbedo.rgb = ec*vec3(1, 0.87647058823, 0.66078431372)*ec*1.2;
+	}
 /* DRAWBUFFERS:0246 */
 
-	gl_FragData[0] = texture2D(texture, adjustedTexCoord)*color;
+	gl_FragData[0] = colorAlbedo * c;
 	gl_FragData[1] = frag2;
-	gl_FragData[2] = vec4((lmcoord.t), 0.8, lmcoord.s, 1.0);
-	gl_FragData[3] = vec4(texture2DGradARB(specular, adjustedTexCoord, dcdx, dcdy).rgb,1.0);
+	gl_FragData[2] = vec4((lmcoord.t), mat, lmcoord.s, 1.0);
+	gl_FragData[3] = vec4(specularity,1.0);
 }

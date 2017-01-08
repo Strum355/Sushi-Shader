@@ -31,7 +31,6 @@
 
 const float PI = 3.1415927;
 
-varying float distance;
 varying vec4 color;
 varying vec2 lmcoord;
 varying float mat;
@@ -42,8 +41,7 @@ varying vec4 vtexcoord;
 varying vec3 tangent;
 varying vec3 normal;
 varying vec3 binormal;
-varying vec4 vertexPos;
-varying vec3 viewDir;
+varying vec3 viewVector;
 varying vec3 wpos;
 varying float dist;
 varying float islava;
@@ -59,8 +57,6 @@ varying vec3 moonVec;
 varying vec3 upVec;
 varying float sunVisibility;
 varying float moonVisibility;
-varying mat3 tbnMatrix;
-varying vec3 fragposition;
 
 attribute vec4 mc_Entity;
 attribute vec4 mc_midTexCoord;
@@ -275,20 +271,18 @@ void main() {
 		binormal = normalize(gl_NormalMatrix * vec3( 0.0, -1.0,  0.0));
 	}
 
- tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
+mat3 tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
 								  tangent.y, binormal.y, normal.y,
 						     	  tangent.z, binormal.z, normal.z);
 
 
-	vertexPos = gl_Vertex;
+	viewVector = ( gl_ModelViewMatrix * gl_Vertex).xyz;
+
 	wpos = worldpos;
-    fragposition = vec3(gl_ModelViewMatrix * vec4(cameraPosition, 1.0));
-    viewDir = cameraPosition * tbnMatrix;
 
+
+	viewVector = normalize(tbnMatrix * viewVector);
+
+	dist = 0.0;
 	dist = sqrt(dot(gl_ModelViewMatrix * gl_Vertex,gl_ModelViewMatrix * gl_Vertex));
-
-  vec4 locposition = gl_ModelViewMatrix * gl_Vertex;
-
-  distance = sqrt(locposition.x * locposition.x + locposition.y * locposition.y + locposition.z * locposition.z);
-
 }

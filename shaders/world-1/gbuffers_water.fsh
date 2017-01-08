@@ -100,7 +100,7 @@ float waterH(vec2 posxz, float speed, float size, float iswater) {
 	vec2 movement3 = vec2(-abs(frameTimeCounter/1000.-0.5))*speed;
 	vec2 movement4 = vec2(abs(frameTimeCounter/1000.-0.5),-abs(frameTimeCounter/1000.-0.5))*speed;
 
-	vec2 coord = (posxz/600)+(movement);
+	vec2 coord = (posxz/600)+(movement/5);
 	vec2 coord1 = (posxz/599.9)+(movement2/5);
 	vec2 coord2 = (posxz/599.8)+(movement3/5);
 	vec2 coord3 = (posxz/599.7)+(movement4);
@@ -112,7 +112,7 @@ float waterH(vec2 posxz, float speed, float size, float iswater) {
 
 
 
-	float noise = BicubicTexture(noisetex, vec2(coord.x, -coord.y*2)).x/2;
+	float noise = BicubicTexture(noisetex, vec2(coord.x, -coord.y*5)).x/2;
 	noise += BicubicTexture(noisetex, vec2(-coord2.x, coord2.y)).x/2;
 	noise += BicubicTexture(noisetex, vec2(coord3.x, -coord3.y*3)).x/2;
 	noise += BicubicTexture(noisetex, vec2(-coord6.x*2, coord4.y)).x/2;
