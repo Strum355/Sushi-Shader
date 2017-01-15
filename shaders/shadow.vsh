@@ -26,7 +26,7 @@
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 
-#define SHADOW_MAP_BIAS 0.85
+#define SHADOW_MAP_BIAS 0.85 //[0.6 0.65 0.7 0.75 0.8 0.85 0.9 0.95] //accuracy of the shadows. higher values give better close range shadows but worse distant shadows
 
 const float PI = 3.1415927;
 

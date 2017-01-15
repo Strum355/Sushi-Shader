@@ -10,15 +10,17 @@
 
 const int		RGBA16 					= 1;
 const int		RGB16 					= 1;
-const int		RGBA32F 					= 3;
+const int		RGBA32F 				= 3;
+const int		RGB8 						= 1;
 
-const int		gnormalFormat			= RGBA16;
-const int		gcolorFormat			= RGBA16;
+const int		gnormalFormat			= RGBA32F;
+const int		gcolorFormat			= RGBA32F;
 const int		gaux1Format			    = RGBA16;
 const int 	compositeFormat			= RGBA16;
 const int		gaux2Format			    = RGBA16;
+const int		gdepthFormat			    = RGBA16;
 const int		gaux3Format			    = RGBA16;
-const int		gaux4Format			    = RGBA16;
+const int		gaux4Format			    = RGB8;
 
 /* Here, intervalMult might need to be tweaked per texture pack.
    The first two numbers determine how many samples are taken per fragment.  They should always be the equal to eachother.

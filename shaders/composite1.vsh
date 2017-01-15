@@ -124,7 +124,7 @@ void main() {
 
 	sunlight = mix(vec3(temp.yzw),vec3(temp2.yzw),(hour-float(temp.x))/float(temp2.x-temp.x))/255.0f;
 
-	sunlight.b *= 0.95;
+	//sunlight.b *= 0.95;
 
 	moonlight =  vec3(0.7,0.7,1.0)/2.0 * 0.012;
 

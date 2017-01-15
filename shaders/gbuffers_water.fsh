@@ -7,7 +7,7 @@
 #define PARALLAX_WATER //Gives water waves a 3D look
 #define WATER_QUALITY 5 //[1 2 3 4 5] higher numbers gives better looking water
 
-	vec4 watercolor = vec4(vec3(0.05, 0.3, 0.5), 0.25); 	//water color and opacity (r,g,b,opacity)
+	vec4 watercolor = vec4(0.05, 0.6, 0.9, 0.25); 	//water color and opacity (r,g,b,opacity)
 
 //////////////////////////////END OF ADJUSTABLE VARIABLES
 //////////////////////////////END OF ADJUSTABLE VARIABLES
@@ -90,15 +90,15 @@ vec2 paralaxCoords(vec3 pos, vec3 tangentVector, float istransparent) {
 
 void main() {
 
-	vec4 tex;
-
-	if (iswater < 0.9)
-		tex = texture2D(texture, vec2(texcoord.st))*color;
-	else
-	tex = vec4((watercolor).rgb,watercolor.a);
+	vec4 albedo;
+	if (iswater < 0.9){
+		albedo = texture2D(texture, texcoord.st);
+	}else{
+		albedo = watercolor;
+	}
 
 	#ifdef USE_WATER_TEXTURE
-	tex = texture2D(texture, texcoord.xy)*color;
+	albedo = texture2D(texture, texcoord.xy)*color;
 	#endif
 
 
@@ -133,7 +133,7 @@ void main() {
 
 /* DRAWBUFFERS:543 */
 
-	gl_FragData[0] = tex;
+	gl_FragData[0] = albedo;
 	gl_FragData[1] = vec4(lmcoord.t, mat, lmcoord.s, 1.0);
-	gl_FragData[2] = vec4(frag2);
+	gl_FragData[2] = frag2;
 }

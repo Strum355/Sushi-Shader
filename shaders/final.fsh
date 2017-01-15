@@ -9,12 +9,9 @@
 //***************************BLOOM***************************//
 
 #define BLOOM
+	#define HQ_BLOOM
 	#define BLOOM_STRENGTH 5.0		//basic multiplier
-	#define FOG_SCATTER 3.0 //[1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0] how much fog scattering occurs during rain
-
-#define DYNAMIC_EXPOSURE					//Makes brighter inside and turned off outside
-	#define DYNAMIC_EXPOSURE_AMOUNT 1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	//Strength
-
+	#define FOG_SCATTER 3.0 //[0.1 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0] how much fog scattering occurs during rain
 
 #define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
 
@@ -38,12 +35,15 @@ uniform sampler2D composite;
 uniform sampler2D noisetex;
 uniform sampler2D gdepthtex;
 uniform sampler2D depthtex0;
+uniform sampler2D depthtex1;
 uniform sampler2D gaux1;
 uniform mat4 gbufferProjection;
+uniform mat4 gbufferProjectionInverse;
 uniform float aspectRatio;
 uniform float near;
 uniform float far;
 uniform float viewWidth;
+uniform float viewHeight;
 uniform float rainStrength;
 uniform float frameTimeCounter;
 
@@ -79,10 +79,36 @@ float luma(vec3 color) {
 	return dot(color,vec3(0.299, 0.587, 0.114));
 }
 
+vec4 nvec4(vec3 pos) {
+    return vec4(pos.xyz, 1.0);
+}
+
+vec3 nvec3(vec4 pos) {
+    return pos.xyz/pos.w;
+}
+
 float saturate(float value){
 		return clamp(value, 0.0, 1.0);
 }
 
+float find_closest(vec2 pos)
+{
+	const int ditherPattern[64] = int[64](
+		0, 32, 8, 40, 2, 34, 10, 42,
+		48, 16, 56, 24, 50, 18, 58, 26,
+		12, 44, 4, 36, 14, 46, 6, 38,
+		60, 28, 52, 20, 62, 30, 54, 22,
+		3, 35, 11, 43, 1, 33, 9, 41,
+		51, 19, 59, 27, 49, 17, 57, 25,
+		15, 47, 7, 39, 13, 45, 5, 37,
+		63, 31, 55, 23, 61, 29, 53, 21);
+
+    vec2 positon = floor(mod(vec2(texcoord.s * viewWidth,texcoord.t * viewHeight), 8.0f));
+
+	int dither = ditherPattern[int(positon.x) + int(positon.y) * 8];
+
+	return float(dither) / 64.0f;
+}
 vec3 saturate(vec3 value){
 	return clamp(value, 0.0, 1.0);
 }
@@ -142,7 +168,7 @@ vec2 customTexcoord(){
 
 	vec2 custom;
 
-	fake_refract = vec2(sin(frameTimeCounter*2.0 + texC.x*0.0 + texC.y*25.0),cos(frameTimeCounter*2.0 + texC.y*0.0 + texC.x*50.0)) * 2.5 *isEyeInWater;
+//	fake_refract = vec2(sin(frameTimeCounter*2.0 + texC.x*0.0 + texC.y*25.0),cos(frameTimeCounter*2.0 + texC.y*0.0 + texC.x*50.0)) * 2.5 *isEyeInWater;
 	#ifdef RAIN_DROP
 		fake_refract2 = vec2(sin(frameTimeCounter*1.0 + texC.x*0.0 + texC.y*100.0),cos(frameTimeCounter*1.0 + texC.y*0.0 + texC.x*200.0))*waterDrop(texC.xy/300)*5 ;
 	#endif
@@ -178,53 +204,47 @@ struct Bloom {
 	vec3 blur5;
 } bloom;
 
-float distratio(vec2 pos, vec2 pos2, float ratio) {
-	float xvect = pos.x*ratio-pos2.x*ratio;
-	float yvect = pos.y-pos2.y;
-
-	return sqrt(xvect*xvect + yvect*yvect);
-}
-
-vec2 noisepattern(vec2 pos) {
-	return vec2(abs(fract(sin(dot(pos ,vec2(18.9898f,28.633f))) * 4378.5453f)),abs(fract(sin(dot(pos.yx ,vec2(18.9898f,28.633f))) * 4378.5453f)));
-}
-
-vec3 calcExposure(vec3 color) {
-         float maxx = 0.1;
-         float minx = 1.0;
-
-         float exposure = max(pow(sky_lightmap, 1.0), 0.0)*maxx + minx;
-
-         color.rgb /= vec3(exposure);
-
-         return color.rgb;
-}
-
-vec3 dynamicExposure(vec3 color) {
-		return color.rgb * clamp((-eyeBrightnessSmooth.y+230)/100.0,0.0,1.0)*2.5*(1-TimeMidnight)*(1-rainx)*DYNAMIC_EXPOSURE_AMOUNT;
-}
-
-vec3 alphablend(vec3 c, vec3 ac, float a) {
-
-	vec3 n_ac = normalize(ac)*(1/sqrt(3.));
-	vec3 nc = sqrt(c*n_ac);
-	return mix(c,nc,a);
-}
-
-vec3 getExposure(vec3 color){
-
-	color *= 2.0;
-
-	return color;
-}
-
-vec3 getSaturation(vec3 color, float saturation)
+vec4 cubic(float x)
 {
-	saturation -= 1.0;
-	color = mix(color,vec3(dot(color,vec3(1.0/3.0))),vec3(-saturation));
-
-	return color;
+    float x2 = x * x;
+    float x3 = x2 * x;
+    vec4 w;
+    w.x =   -x3 + 3*x2 - 3*x + 1;
+    w.y =  3*x3 - 6*x2       + 4;
+    w.z = -3*x3 + 3*x2 + 3*x + 1;
+    w.w =  x3;
+    return w / 6.f;
 }
+
+vec4 BicubicTexture(in sampler2D tex, in vec2 coord)
+{
+	vec2 resolution = vec2(viewWidth, viewHeight);
+
+	coord *= resolution;
+
+	float fx = fract(coord.x);
+    float fy = fract(coord.y);
+    coord.x -= fx;
+    coord.y -= fy;
+
+    vec4 xcubic = cubic(fx);
+    vec4 ycubic = cubic(fy);
+
+    vec4 c = vec4(coord.x - 0.5, coord.x + 1.5, coord.y - 0.5, coord.y + 1.5);
+    vec4 s = vec4(xcubic.x + xcubic.y, xcubic.z + xcubic.w, ycubic.x + ycubic.y, ycubic.z + ycubic.w);
+    vec4 offset = c + vec4(xcubic.y, xcubic.w, ycubic.y, ycubic.w) / s;
+
+    vec4 sample0 = texture2D(tex, vec2(offset.x, offset.z) / resolution);
+    vec4 sample1 = texture2D(tex, vec2(offset.y, offset.z) / resolution);
+    vec4 sample2 = texture2D(tex, vec2(offset.x, offset.w) / resolution);
+    vec4 sample3 = texture2D(tex, vec2(offset.y, offset.w) / resolution);
+
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+
+    return mix( mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}
+
 
 #ifdef BLOOM
 
@@ -232,11 +252,11 @@ vec3 getSaturation(vec3 color, float saturation)
 
 		vec3 blur = vec3(0);
 
-		b.blur1 = pow(texture2D(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
-		b.blur2 = pow(texture2D(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
-		b.blur3 = pow(texture2D(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
-		b.blur4 = pow(texture2D(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
-		b.blur5 = pow(texture2D(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
+		b.blur1 = pow(BicubicTexture(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
+		b.blur2 = pow(BicubicTexture(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
+		b.blur3 = pow(BicubicTexture(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
+		b.blur4 = pow(BicubicTexture(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
+		b.blur5 = pow(BicubicTexture(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
 
 		blur = b.blur1 + b.blur2 + b.blur3 + b.blur4 + b.blur5;
 
@@ -254,46 +274,32 @@ void NJTonemap(inout vec3 color){
 }
 
 vec3 robobo1221sTonemap(vec3 color){
+	float b = 2.2;
 
-	float a = 1;
-	float b = 2;
-	float c = 1;
-
-	vec3 x = color - 0.04;
-	vec3 cout = ((3.8 * x + 0.2 * a) / (3.7 * x + 0.6));
-		cout = pow(cout, vec3(b * c)) * c;
+	vec3 x = color;
+	vec3 cout = ((4.3 * x + 0.0 ) / (4.3 * x + 0.6));
+		cout = pow(cout, vec3(b));
 
 	return cout;
 }
 
-//VOID MAIN//
-
 void main() {
-
-	const float lifetime = 3.0;
-	float ftime = frameTimeCounter*2.0/lifetime;
-
-	vec2 pos = (noisepattern(vec2(-0.94386347*floor(ftime*0.5+0.25),floor(ftime*0.5+0.25)))-0.5)*0.85+0.5;
-
-
 	vec3 color = texture2D(gcolor,Tc.st).rgb * MAX_COLOR_RANGE;
 
-	float fogDensity = saturate(pow(exp(ld(texture2D(depthtex0, Tc.st).r)), 3.0)-2.0);
+	vec3 pos1 = vec3(Tc.st, texture2D(depthtex0, Tc.st).r);
+	pos1 = nvec3(gbufferProjectionInverse * nvec4(pos1 * 2.0 - 1.0));
+	float fogDensity = 1-saturate(exp(-pow(length(pos1)/100, 2.0)));
 	#ifdef BLOOM
-		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2,saturate(0.3+fogDensity*rainStrength));
+		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2,saturate(0.1+fogDensity*rainStrength));
 	#endif
 
-	#ifdef CALCULATE_EXPOSURE
 		if (isEyeInWater > 0.9){
-		//	color.rgb = calcExposure(color);
 			color *= vec3(1.0, 3.0, 4.0)/2;
 		}
-	#endif
-	
-	color = getExposure(color);
-	color = robobo1221sTonemap(color);
 
-/////////////////////////////////////////////////////////////////////////////////////
+
+	color += find_closest(texcoord.st)/255; //some dithering to help with banding
+	color = robobo1221sTonemap(color);
 
 	gl_FragColor = vec4(color.rgb, 1.0);
 

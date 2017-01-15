@@ -3,6 +3,8 @@
 //***************************ADJUSTABLE VARIABLES***************************//
 //***************************ADJUSTABLE VARIABLES***************************//
 //***************************ADJUSTABLE VARIABLES***************************//
+#define DYNAMIC_EXPOSURE					//Makes brighter inside and turned off outside
+	#define DYNAMIC_EXPOSURE_AMOUNT 1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	//Strength
 
 #define WATER_QUALITY 5 //[1 2 3 4 5] higher numbers gives better looking water
 
@@ -15,7 +17,7 @@
 #define WATER_REFRACT		//Also includes stained glass and ice.
 	#define REFRACT_MULT 10.0
 
-#define FOG
+//#define FOG
 
 #define WATER_DEPTH_FOG
 
@@ -62,8 +64,10 @@ uniform sampler2D noisetex;
 uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D gcolor;
+uniform sampler2D gdepth;
 uniform sampler2D gnormal;
 uniform sampler2D composite;
+uniform sampler2D gaux4;
 uniform sampler2D gaux3;
 uniform sampler2D gaux2;
 uniform sampler2D gaux1;
@@ -92,7 +96,7 @@ float comp = 1.0-near/far/far;			//distance above that are considered as sky
 float timefract = worldTime;
 
 //Raining
-float rainx = clamp(rainStrength, 0.0, 0.6);
+float rainx = clamp(rainStrength, 0.0, 0.5);
 float wetx  = clamp(wetness, 0.0f, 1.0f);
 
 //Calculate Time of Day
@@ -122,6 +126,8 @@ float iswet = wetness*pow(sky_lightmap,10.0);
 vec3 specular = pow(texture2D(gaux3,texcoord.xy).rgb,vec3(2.2));
 float specmap = float(aux.a > 0.7 && aux.a < 0.72) + (specular.r+specular.g*(iswet));
 vec3 color = texture2D(gcolor,texcoord.xy,0).rgb * MAX_COLOR_RANGE;
+vec3 shadowColor = texture2D(gaux4, texcoord.st).rgb;
+vec3 rawAlbedo = texture2D(gdepth,texcoord.st).rgb;
 
 int iswater = int(aux.g > 0.04 && aux.g < 0.07);
 int land2 = int(aux.g < 0.03);
@@ -135,13 +141,29 @@ float emissive = float(aux.g > 0.58 && aux.g < 0.62);
 
 float torchLightmap = aux.b;
 
-float waveZ = mix(3.0,0.25,1-istransparent);
-float waveM = mix(0.0,2.0,1-istransparent);
-float waveS = mix(0.1,1.5,1-istransparent);
-
+float waveZ = mix(3.0,0.25,1-istransparent+ice);
+float waveM = mix(0.0,2.0,1-istransparent+ice);
+float waveS = mix(0.1,1.5,1-istransparent+ice);
 
 #include "lib/waterBump.glsl"
 
+mat2 time = mat2(vec2(
+				((clamp(timefract, 23000.0f, 25000.0f) - 23000.0f) / 1000.0f) + (1.0f - (clamp(timefract, 0.0f, 2000.0f)/2000.0f)),
+				((clamp(timefract, 0.0f, 2000.0f)) / 2000.0f) - ((clamp(timefract, 9000.0f, 12000.0f) - 9000.0f) / 3000.0f)),
+
+				vec2(
+				((clamp(timefract, 9000.0f, 12000.0f) - 9000.0f) / 3000.0f) - ((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f),
+				((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f) - ((clamp(timefract, 23000.0f, 24000.0f) - 23000.0f) / 1000.0f))
+);	//time[0].xy = sunrise and noon. time[1].xy = sunset and mindight.
+
+vec3 sunColor = vec3(1.0,0.65,0.3) * 0.5 * time[0].x * (1.0-rainStrength) +			//Sunrise
+								vec3(1.0,1.0,1.0) * 1.0 * time[0].y * (1.0-rainStrength) +							//Noon
+								vec3(1.0,0.6,0.2) * 0.5 * (time[1].x + time[1].y) * (1.0-rainStrength) +//Sunset
+								vec3(0.1, 0.1, 0.1) * 0.3 * rainStrength;																//Rain
+
+vec3 moonColor = vec3(0.09,0.12,0.15) * 2.0 * (1.0-rainStrength);
+
+vec3 lightColor = mix(sunColor, moonColor, TimeMidnight);
 
 vec3 nvec3(vec4 pos) {
     return pos.xyz/pos.w;
@@ -165,6 +187,10 @@ float getDepth(float depth) {
 
 float getLinearDepth(vec2 coord){
 	return (near * far) / (texture2D(depthtex1, coord).x * (near - far) + far);
+}
+
+float sunSpecTime(float invert){
+		return mix((1-TimeMidnight), (TimeMidnight), invert) * (1-rainx*2.0) * (1-isEyeInWater) * float(pow(sky_lightmap, 50.0) > 0.1);
 }
 
 float convertVec3ToFloat(in vec3 invec){
@@ -194,7 +220,7 @@ vec3 saturate(vec3 inValue){
 
 float subSurfaceScattering(vec3 vec,vec3 pos, float N) {
 
-return pow(max(dot(vec,normalize(pos))*0.5+0.5,0.0),N)*(N+1)/6.28;
+return (pow(max(dot(vec,normalize(pos))*0.5+0.5,0.0),N)*(N+1)/6.28)*(1-rainStrength);
 
 }
 
@@ -205,6 +231,48 @@ float noisepattern(vec2 pos, float sample) {
 	return noise;
 }
 
+vec4 cubic(float x)
+{
+    float x2 = x * x;
+    float x3 = x2 * x;
+    vec4 w;
+    w.x =   -x3 + 3*x2 - 3*x + 1;
+    w.y =  3*x3 - 6*x2       + 4;
+    w.z = -3*x3 + 3*x2 + 3*x + 1;
+    w.w =  x3;
+    return w / 6.f;
+}
+
+vec4 BicubicTexture(in sampler2D tex, in vec2 coord)
+{
+	vec2 resolution = vec2(256);
+
+	coord *= resolution;
+
+	float fx = fract(coord.x);
+    float fy = fract(coord.y);
+    coord.x -= fx;
+    coord.y -= fy;
+
+    vec4 xcubic = cubic(fx);
+    vec4 ycubic = cubic(fy);
+
+    vec4 c = vec4(coord.x - 0.5, coord.x + 1.5, coord.y - 0.5, coord.y + 1.5);
+    vec4 s = vec4(xcubic.x + xcubic.y, xcubic.z + xcubic.w, ycubic.x + ycubic.y, ycubic.z + ycubic.w);
+    vec4 offset = c + vec4(xcubic.y, xcubic.w, ycubic.y, ycubic.w) / s;
+
+    vec4 sample0 = texture2D(tex, vec2(offset.x, offset.z) / resolution);
+    vec4 sample1 = texture2D(tex, vec2(offset.y, offset.z) / resolution);
+    vec4 sample2 = texture2D(tex, vec2(offset.x, offset.w) / resolution);
+    vec4 sample3 = texture2D(tex, vec2(offset.y, offset.w) / resolution);
+
+    float sx = s.x / (s.x + s.y);
+    float sy = s.z / (s.z + s.w);
+
+    return mix( mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}
+
+
 vec3 convertCameraSpaceToScreenSpace(vec3 cameraSpace) {
     vec4 clipSpace = gbufferProjection * vec4(cameraSpace, 1.0);
     vec3 NDCSpace = clipSpace.xyz / clipSpace.w;
@@ -212,11 +280,10 @@ vec3 convertCameraSpaceToScreenSpace(vec3 cameraSpace) {
     return screenSpace;
 }
 
-vec3 renderGaux2(vec3 color, vec2 pos){
-
+vec3 renderGaux2(vec3 color, vec2 pos, vec3 light_col){
 	vec4 albedo = texture2D(gaux2, pos.st);
 	vec3 divisor = mix(vec3(1.0), color, albedo.a);
-	return mix(color,albedo.rgb  * color,clamp(albedo.a * 1.25,0.0,1.0));
+	return mix(color,albedo.rgb*( color/divisor),clamp(albedo.a * 1.25,0.0,1.0));
 }
 
 float startPixeldepth = texture2D(depthtex1,texcoord.st).x;
@@ -234,6 +301,9 @@ float refractmask(vec2 coord, float lod){
 		mask = float(mask > 0.4 && mask < 0.42);
 	}
 
+	if (ice > 0.9){
+		mask = float(mask > 0.09 && mask < 0.11);
+	}
 	return mask;
 
 }
@@ -260,8 +330,8 @@ float refractmask(vec2 coord, float lod){
 		float refMult = 1.0;
 			refMult = clamp(depth.x - depth.y,0.0,1.0);
 			refMult /= depth.y;
-			refMult *= REFRACT_MULT / 200.0;
-			refMult *= mix(1.0,0.1,istransparent);
+			refMult *= REFRACT_MULT / 100.0;
+			refMult *= mix(1.0,0.1,istransparent+ice);
 
 
 		coord1 = texcoord.st + refraction.xy * refMult;
@@ -356,12 +426,12 @@ float SunIntensity(float zenithAngleCos, float sunIntensity, float cutoffAngle, 
 vec3 Uncharted2Tonemap(vec3 x)
 {
 
-	float A = 0.40;
-	float B = 01.0;
-	float C = 0.10;
-	float D = 01.6;
-	float E = 0.03;
-	float F = 0.30;
+	float A = 0.6;
+	float B = 0.3;
+	float C = 0.6;
+	float D = 1.2;
+	float E = 0.1;
+	float F = 1.4;
 
    return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
 }
@@ -380,13 +450,12 @@ vec3 ToneMap(vec3 color, vec3 sunPos) {
 
 float calcSun(vec3 fragpos, vec3 sunVec){
 
-	const float sunAngularDiameterCos = 0.99673194915;
+	const float sunAngularDiameterCos = 0.99773194915;
 
 	float cosViewSunAngle = dot(normalize(fragpos.rgb), sunVec);
-	float sundisk = smoothstep(sunAngularDiameterCos,sunAngularDiameterCos+0.0001,cosViewSunAngle);
+	float sundisk = smoothstep(sunAngularDiameterCos-0.005,sunAngularDiameterCos+0.1,cosViewSunAngle);
 
-	return 20000.0 * sundisk * (1.0 - rainStrength);
-
+	return 1000000.0 * sundisk * (1.0 - rainStrength);
 }
 
 float calcMoon(vec3 fragpos, vec3 moonVec){
@@ -394,13 +463,13 @@ float calcMoon(vec3 fragpos, vec3 moonVec){
 	const float moonAngularDiameterCos = 0.99833194915;
 
 	float cosViewSunAngle = dot(normalize(fragpos.rgb), moonVec);
-	float moondisk = smoothstep(moonAngularDiameterCos,moonAngularDiameterCos+0.001,cosViewSunAngle);
+	float moondisk = smoothstep(moonAngularDiameterCos,moonAngularDiameterCos+0.0005,cosViewSunAngle);
 
-	return clamp(10.0 * moondisk, 0.0, 15.0) * (1.0 - rainStrength);
+	return clamp(30.0 * moondisk, 0.0, 25.0) * (1.0 - rainStrength);
 
 }
 
-vec3 getAtmosphericScattering(vec3 color, vec3 fragpos, float sunMoonMult, vec3 fogColor, out vec3 sunMax, out float moonMax){
+vec3 AtmosphericScattering(vec3 color, vec3 fragpos, float isRef){
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -465,25 +534,24 @@ vec3 getAtmosphericScattering(vec3 color, vec3 fragpos, float sunMoonMult, vec3 
 	vec3 sky = scattering * (1.0 - Fex);
 	sky *= mix(vec3(1.0),pow(scattering * Fex,vec3(0.5)),clamp(pow(1.0-cosSunUpAngle,5.0),0.0,1.0));
 
-	vec3 sun = K * calcSun(fragpos, sunVec);
+	vec3 sun = sunColor * calcSun(fragpos, sunVec);
 	vec3 moon = pow(moonlight, vec3(0.4545)) * calcMoon(fragpos, moonVec);
 
-	sunMax = sunE * pow(mix(Fexsun, Fex, clamp(pow(1.0-cosUpViewAngle,4.0),0.0,1.0)), vec3(0.4545))
+	vec3 sunMax = sunE * pow(mix(Fexsun, Fex, clamp(pow(1.0-cosUpViewAngle,4.0),0.0,1.0)), vec3(0.4545))
 	* mix(0.000005, 0.00003, clamp(pow(1.0-cosSunUpAngle,3.0),0.0,1.0)) * (1.0 - rainStrength);
 
-	moonMax = pow(clamp(cosUpViewAngle,0.0,1.0), 0.8) * (1.0 - rainStrength);
+	float moonMax = pow(clamp(cosUpViewAngle,0.0,1.0), 0.8) * (1.0 - rainStrength);
 
-	sky = max(ToneMap(sky, sunVec), 0.0) + (sun * sunMax + moon * moonMax) * sunMoonMult;
+	sky = max(ToneMap(sky, sunVec), 0.0) + (sun * sunMax + moon * moonMax)*isRef;
 
 	float nightLightScattering = pow(max(1.0 - max(cosUpViewAngle, 0.0 ),0.0), 2.0);
-
+	vec3 fogColor = vec3(0.3);
 	sky += pow(fogColor * 0.5, vec3(2.2)) * ((nightLightScattering + 0.5 * (1.0 - nightLightScattering)) * clamp(pow(1.0-cosSunUpAngle,35.0),0.0,1.0));
 
 	color = mix(sky, pow(fogColor, vec3(2.2)), rainStrength);
 
 	return color;
 }
-
 
 #ifdef CLOUDS
 vec3 drawCloud(vec3 fposition,vec3 color, float mult) {
@@ -494,14 +562,14 @@ vec3 drawCloud(vec3 fposition,vec3 color, float mult) {
 			vec3 wvec = normalize(tpos);
 			vec3 wVector = normalize(tpos);
 
-			vec3 cloudCol = pow(sunlight * 2.4,vec3(3.4))*(TimeSunrise+TimeSunset);
+			vec3 cloudCol = pow(lightColor * 2.4,vec3(3.4))*(TimeSunrise+TimeSunset);
 				cloudCol += (cloudColor * 2.0)*(TimeNoon);
 				cloudCol += (moonlight * 1000.0)*(TimeMidnight);
-				cloudCol +=	pow(sunlight * 1.5,vec3(3.0)) * (1-transition_fading);
+				cloudCol +=	pow(lightColor * 1.5,vec3(3.0)) * (1-transition_fading);
 
 			float totalcloud = 0.0;
 
-			float height = (700.0)/(wVector.y);
+			float height = (900.0)/(wVector.y);
 			vec2 wind = vec2(abs(frameTimeCounter/20000.-0.5),abs(frameTimeCounter/20000.-0.5))+vec2(0.5);
 
 			vec3 intersection;
@@ -513,19 +581,19 @@ vec3 drawCloud(vec3 fposition,vec3 color, float mult) {
 			for (int i = 0; i < Steps; i++) {
 				intersection = wVector * (height - i * 150 * Size / Steps); 			//curved cloud plane
 
-				vec2 coord1 = (intersection.xz+cameraPosition.xz*2.5)/200000;
+				vec2 coord1 = (intersection.xz+cameraPosition.xz*2.5)/70000;
 				coord1 += (wind);
 				vec2 coord = (coord1/Size);
 
-				float noise = texture2D(noisetex,coord - wind * 0.5).x;
-				noise += texture2D(noisetex,coord*3.5).x/3.5;
-				noise += texture2D(noisetex,coord*6.125).x/6.125;
-				noise += texture2D(noisetex,coord*12.25).x/12.25;
+				float noise = BicubicTexture(noisetex,coord - wind * 0.5).x;
+				noise += BicubicTexture(noisetex,coord*3.5).x/3.5;
+				noise += BicubicTexture(noisetex,coord*6.125).x/6.125;
+				//noise += BicubicTexture(noisetex,coord*12.25).x/12.25;
 				noise /= clamp(texture2D(noisetex,coord / 3.1 - wind * 0.5).x * 1.3,0.0,1.0);
 
 				noise *= mix(1.0,pow(noise, pow(2.0,-0.5)),noise);
 
-				noise /= 0.13;
+				noise *= 7;
 
 				float cl = max(noise-0.7,0.0);
 				cl = max(cl,0.)*0.05 * (1.0 - rainx * 0.9);
@@ -538,24 +606,24 @@ vec3 drawCloud(vec3 fposition,vec3 color, float mult) {
 
 			}
 
-			cloudCol = mix(cloudCol*pow(1-density, 2.0),vec3(cloudCol*0.125),pow(density, 2.0)) * 2.0;
+			cloudCol = mix(cloudCol,cloudCol*0.1,saturate(density*15)) * 5.0;
 
-			cloudCol += pow(sunlight * mix(3.0,2.4,TimeSunset + TimeSunrise),vec3(mix(3.4 * (1.0 - (1.0 - transition_fading) * 0.3),1.0,TimeNoon)))* 80*pow(1-density, 50.0) * mix(1.0,0.3,1.0 - transition_fading) * 1.5 * (1-(TimeMidnight * transition_fading)) * (1-rainx);
-			cloudCol += pow(sunlight * mix(3.0,2.4,TimeSunset + TimeSunrise),vec3(mix(3.4,1.0,TimeNoon))) * 25 * (1- TimeMidnight);
-			cloudCol += moonlight * (50*(pow(1-density, 14.0))) * 500 * transition_fading * (1-rainx);
+			//cloudCol += pow(sunlight * mix(3.0,2.4,TimeSunset + TimeSunrise),vec3(mix(3.4 * (1.0 - (1.0 - transition_fading) * 0.3),1.0,TimeNoon)))* 80*pow(1-density, 50.0) * mix(1.0,0.3,1.0 - transition_fading) * 1.5 * (1-(TimeMidnight * transition_fading)) * (1-rainx);
+			//cloudCol += pow(sunlight * mix(3.0,2.4,TimeSunset + TimeSunrise),vec3(mix(3.4,1.0,TimeNoon))) * 25 * (1- TimeMidnight);
+			//cloudCol += moonlight * (50*(pow(1-density, 14.0))) * 500 * transition_fading * (1-rainx);
+			cloudCol *= 200.0;
 
 			cloudCol += cloudCol * subSurfaceScattering(sunVec, fposition, 60.0)*3.0*pow(1-density, 150.0) * (1.0 - moonVisibility * 0.5) * (TimeNoon + TimeSunrise + TimeSunset + (1.0 - transition_fading));
 			cloudCol += cloudCol * subSurfaceScattering(moonVec, fposition, 60.0)*3.0*pow(1-density, 150.0) * moonVisibility;
 
-			cloudCol *= (1- (0.5 * TimeMidnight * transition_fading));
+			cloudCol *= (1- (0.95 * TimeMidnight * transition_fading));
 			cloudCol *= (1+ TimeNoon);
 			cloudCol = mix(cloudCol,vec3(0.0),pow(1-density, 100.0));
-
 			totalcloud = min(totalcloud / weight,1.0);
 
 			totalcloud = mix(totalcloud,0.0,pow(1-density, 100.0));
 
-			return pow(mix(pow(color.rgb, vec3(2.2)),pow(cloudCol * mult * 0.175 * 0.5 / 45.0, vec3(2.2)),clamp(totalcloud * 15.0, 0.0, 1.0) * (1.0 - rainx * 0.8) * pow(cosT,1.0)), vec3(0.4545));
+			return mix(color.rgb,cloudCol * mult * 0.175 * 0.5 / 45.0,clamp(totalcloud * 15.0, 0.0, 1.0) * (1.0 - rainx * 0.8) * pow(cosT,2.0));
 	}
 #endif
 
@@ -583,6 +651,8 @@ vec3 drawCloud(vec3 fposition,vec3 color, float mult) {
 	}
 #endif
 
+
+
 float getRainPuddles(float sizeMult, float addTime){
 
 
@@ -593,12 +663,12 @@ float getRainPuddles(float sizeMult, float addTime){
 
 	vec2 coord = (worldPos.xz/10000 * sizeMult);
 
-	float rainPuddles = texture2D(noisetex, fract(coord.xy) + addTime * 2.0).x;
-	rainPuddles += texture2D(noisetex, fract(coord.xy*2) - addTime).x;
-	rainPuddles += texture2D(noisetex, fract(coord.xy*4) + addTime).x;
-	rainPuddles += texture2D(noisetex, fract(coord.xy*8) - addTime * 2.0).x;
+	float rainPuddles = BicubicTexture(noisetex, fract(coord.xy*8) + addTime * 2.0).x*2;
+	rainPuddles += BicubicTexture(noisetex, fract(coord.xy*6) - addTime).x*3;
+	//rainPuddles += BicubicTexture(noisetex, fract(coord.xy*4) + addTime).x;
+//	rainPuddles += BicubicTexture(noisetex, fract(coord.xy*8) - addTime * 2.0).x;
 
-	float strength = max(rainPuddles-1.9,0.0);
+	float strength = max(rainPuddles-1.6,0.20);
 	float dL = 0.5;
 	float L = (1.0 - (pow(dL,strength)));
 
@@ -646,9 +716,9 @@ float getnoise(vec2 pos) {
 		float vlInsideNight = ((eBS * 12.5 * 0.2 * VL_STRENGTH_INSIDE * (moonVisibility)));
 		float vlFinalInside = (vlInside + vlInsideNight);
 
-		vec3 vlDay = vec3(sunlight) * VL_STRENGTH_DAY * TimeNoon;
+		vec3 vlDay = vec3(lightColor) * VL_STRENGTH_DAY * TimeNoon;
 		vec3 vlNight = vec3(moonlight) * 60 * (VL_STRENGTH_NIGHT * moonVisibility);
-		vec3 vlSSSR = pow(vec3(sunlight), vec3(1.0)) * (VL_STRENGTH_SUNSET_SUNRISE * (1 - TimeNoon) * (1 - moonVisibility));
+		vec3 vlSSSR = pow(vec3(lightColor), vec3(1.0)) * (VL_STRENGTH_SUNSET_SUNRISE * (1 - TimeNoon) * (1 - moonVisibility));
 		vec3 combined = (vlDay + vlNight + vlSSSR);
 
 		vec3 atmosphereColor = fogcolor * (1.0 - atmosphere);
@@ -671,6 +741,11 @@ float getnoise(vec2 pos) {
 float dynamicExposure() {
 		return clamp((-eyeBrightnessSmooth.y+230)/100.0,0.0,1.0);
 }
+
+vec3 dynamicExposure(vec3 color) {
+		return color.rgb * clamp((-eyeBrightnessSmooth.y+230)/100.0,0.0,1.0)*2.5*(1-TimeMidnight)*(1-rainx)*DYNAMIC_EXPOSURE_AMOUNT;
+}
+
 
 vec3 getRainFogColor(){
 		vec3 rainfogclr = vec3(0.1,0.095,0.1)* 0.75 *rainx*mix(1-TimeMidnight,1.0,(1-transition_fading) * pow(TimeSunrise + TimeSunset, 0.5));
@@ -698,7 +773,7 @@ vec3 getFog(vec3 color, bool land, bool land2, vec2 pos){
 	float volumetric_cone = pow(max(dot(normalize(fragposFog),lightVector),0.0),2.5)*transition_fading;
 
 		float fog = exp(-pow(sqrt(dot(fragposFog,fragposFog))/far* 0.4 *(1-(TimeSunrise+TimeSunset)*0.4) ,2.0));
-		float fog2 = exp(-pow(sqrt(dot(fragposFog,fragposFog))/150 ,2.0));
+		float fog2 = exp(-pow(sqrt(dot(fragposFog,fragposFog))/250 ,2.0));
 		float fog3 = exp(-pow(sqrt(dot(fragposFog,fragposFog))/140 ,2.0));
 		float fogfactor =  clamp(fog + hand,0.0,1.0);
 		float fogfactor2 =  clamp(fog2 + hand,0.0,1.0);
@@ -715,10 +790,10 @@ vec3 getFog(vec3 color, bool land, bool land2, vec2 pos){
 
 		//glow
 
-		fogclr = mix(fogclr, pow(sunlight,vec3(2.2)) * 2.0 + fogclr, volumetric_cone*transition_fading*(1.0-TimeMidnight)*(1.0-TimeNoon)*(1.0-rainx*0.4) * 1.5);
+		fogclr = mix(fogclr, pow(lightColor,vec3(2.2)) * 2.0 + fogclr, volumetric_cone*transition_fading*(1.0-TimeMidnight)*(1.0-TimeNoon)*(1.0-rainx*0.4) * 1.5);
 		fogclr += fogclr * 0.05 * volumetric_cone*2*transition_fading*TimeMidnight*(1.0-rainx)*1.0;
 
-		fogclr = mix(fogclr,sunlight,volumetric_cone*TimeNoon*(1.0-rainx));
+		fogclr = mix(fogclr,lightColor,volumetric_cone*TimeNoon*(1.0-rainx));
 
 		if (isEyeInWater > .9) {
 			} else {
@@ -747,20 +822,17 @@ vec3 getSkyColor() {
 
 	////////////////////////////////////////////////////////////////////////////////
 
-	vec3 sclr = vec3(70.0,85,150)/1100*TimeNoon*(1.0-rainx);
-		 sclr += vec3(70.0,85,150)/1100*(TimeSunrise+TimeSunset)*transition_fading*(1.0-rainx);
-		 sclr += vec3(70.0,85,150)/1100*(1-transition_fading)*(TimeSunrise + TimeSunset)*(1.0-rainx);
-		 sclr += vec3(ambient_color.r/5.0,ambient_color.g/5.0 -
-		 (ambient_color.g * 0.03),ambient_color.b/5.0)/3.4*moonVisibility*transition_fading*(1.0-rainx);
+	vec3 sclr = vec3(00.0,85,150)/1100*TimeNoon*(1.0-rainx);
+		 sclr += vec3(0.0,85,150)/1100*(TimeSunrise+TimeSunset)*transition_fading*(1.0-rainx);
+		 sclr += vec3(0.0,85,150)/1100*(1-transition_fading)*(TimeSunrise + TimeSunset)*(1.0-rainx);
+		 sclr += vec3(ambient_color.r/5.0,ambient_color.g/5.0 - (ambient_color.g * 0.03),ambient_color.b/5.0)/3.4*moonVisibility*transition_fading*(1.0-rainx);
 
 		 sclr += vec3((moonlight*0.5)*7.5)*(1-transition_fading)*(1-(TimeSunrise + TimeSunset))*(1.0-rainx);
-		 sclr *= 2.0;
-		 sclr /= 2.5;
 		 sclr *= (1.0-TimeSunrise*0.35)*(1.0-TimeSunset*0.35);
 		 sclr += vec3(0.1,0.095,0.1)*1.5*rainx*(1-moonVisibility);
 		 sclr = mix(sclr, vec3(0.1,0.095,0.1)* 0.75 * moonlight * 20.0, rainx * (TimeMidnight + (1.0 - transition_fading)));
 
-	return sclr;
+	return sclr*0.7;
 }
 
 #ifdef REFLECTIONS
@@ -802,7 +874,7 @@ vec4 raytrace(vec3 fragpos, vec3 normal, vec3 fogclr, vec3 rvector, float fresne
 
 					bool land = texture2D(depthtex0, pos.st).r < comp;
                     float border = clamp(1.0 - pow(cdist(pos.st), 10.0), 0.0, 1.0);
-                    color = (texture2D(gcolor, pos.st)*2) * MAX_COLOR_RANGE;
+                    color = (texture2D(gcolor, pos.st)) * MAX_COLOR_RANGE;
 
 						color.a = 1.0;
 
@@ -831,21 +903,9 @@ vec4 raytrace(vec3 fragpos, vec3 normal, vec3 fogclr, vec3 rvector, float fresne
     return color;
 }
 
-vec3 getSkyReflection(vec3 reflectedVector){
+vec3 getSkyReflection(vec3 reflectedVector, vec3 color){
 
-	vec2 cone12 = vec2(0.0);
-		cone12.x = pow(max(dot(normalize(reflectedVector),sunVec),0.0),2.5);
-		cone12.y = pow(1-max(dot(normalize(reflectedVector),upVec),0.0),3.5);
-
-	vec3 sclr = getSkyColor();
-
-	sclr = mix(sclr,vec3(25,15,10)/100,(TimeSunrise+TimeSunset)*transition_fading* 0.5 *cone12.x*(1.0-rainx));
-	sclr = mix(sclr,(vec3(88,30,20))/200/12.5,cone12.x*(1-transition_fading)*(1.0-rainx));
-	sclr += sclr * 1.5 *cone12.y * (1.0 - ((rainStrength * 1.6 * (1.0 - TimeMidnight * 0.3 * 1.6)) + TimeMidnight) * 0.75)
-	* (1.0 + (TimeSunrise + TimeSunset) * (1.0 - rainStrength) * 0.5);
-
-	sclr *= 6.0;
-
+	vec3 sclr = AtmosphericScattering(color.rgb, reflectedVector, 0.0);
 	#ifdef CLOUDS
 		sclr = drawCloud(reflectedVector.xyz,sclr.rgb,2.0) * (1.0 - isEyeInWater);
 	#else
@@ -854,8 +914,6 @@ vec3 getSkyReflection(vec3 reflectedVector){
 
 	#ifdef STARS
 		sclr = drawStar(reflectedVector.xyz,sclr.rgb) * (1.0 - isEyeInWater);
-	#else
-		sclr = sclr * (1.0 - isEyeInWater);
 	#endif
 
 	return sclr;
@@ -889,7 +947,7 @@ vec3 waterRefraction(vec3 color) {
 	refraction.g = bool(maskCoord2) ? rA.g : color.g;
 	refraction.b = bool(maskCoord3) ? rA.b : color.b;
 
-	if (iswater > 0.9 || istransparent > 0.9)	color = refraction;
+	if (iswater > 0.9 || istransparent > 0.9 || ice > 0.9)	color = refraction;
 
 	return color;
 }
@@ -1041,7 +1099,7 @@ vec4 getClouds(in vec3 rayworldposition, float steps, vec3 fragpos, vec3 color){
 
 			float sunGlow = pow(max(dot(normalize(fragpos),lightVector),0.0),50.0) * transition_fading;
 
-			vec3 lightColor = mix(sunlight, moonlight * 10.0, TimeMidnight) * 1.5;
+			vec3 lightColor = mix(lightColor, moonlight * 10.0, TimeMidnight) * 1.5;
 				lightColor = mix(lightColor, pow(lightColor, vec3(2.2)),TimeSunrise + TimeSunset);
 				lightColor = mix(lightColor,lightColor * 0.1, 0.1 * (min(1.0, noise1)));
 				lightColor *= 1.0 + sunGlow;
@@ -1127,8 +1185,13 @@ float calcWaterSSS(vec3 normal){
 	return scatter;
 }
 
-float schlickFresnel(float VoH, float F0) {
-	return F0 + (1.0 - F0) * max(pow(1.0 - VoH, 5.0), 0.0);
+float pow5(float x) {
+    float x2 = x * x;
+    return x2 * x2 * x;
+}
+
+float Fresnel(float f0, float VoH) {
+	return f0 + (1.0 - f0) * pow5(1.0 - VoH);
 }
 
 vec2 random(vec2 p)
@@ -1138,6 +1201,7 @@ vec2 random(vec2 p)
     return fract((p.xx+p.yx)*p.xy)*2.-1.;
 
 }
+
 
 //////////////////////////////main//////////////////////////////
 //////////////////////////////main//////////////////////////////
@@ -1187,9 +1251,7 @@ void main() {
 
 	float depth = getWaterDepth(fragpos, fragpos2);
 
-	vec3 sunMult = vec3(0.0);
-	float moonMult = 0.0;
-	if(!land) color = pow(getAtmosphericScattering(pow(color, vec3(1)), fragpos2.rgb, 1.0, vec3(0.3), sunMult, moonMult), vec3(1));
+	if(!land) color = AtmosphericScattering(color, fragpos.rgb, 1.0);
 
 	#ifdef CLOUDS
 		if (!land)	color.rgb = drawCloud(fragpos2.xyz,color.rgb,1.0);
@@ -1200,22 +1262,15 @@ void main() {
 	#endif
 
 	// setting up light color
-		vec3 light_col = mix(pow(sunlight * (transition_fading * (1.0 - TimeMidnight)),vec3(4.4)),
-		moonlight*50,
-		moonVisibility * transition_fading * TimeMidnight * (1.0 - (TimeSunrise + TimeSunset)));
+	//	vec3 light_col = mix(pow(sunlight * (transition_fading * (1.0 - TimeMidnight)),vec3(4.4)), moonlight*50, moonVisibility * transition_fading * TimeMidnight * (1.0 - (TimeSunrise + TimeSunset)));
+		vec3 light_col = lightColor;
+	//	light_col = mix(light_col,vec3(sqrt(dot(light_col,light_col)))*vec3(0.25,0.32,0.4),rainx);
+	//	light_col = pow(light_col,mix(vec3(1.0 / 5.0),vec3(0.5), pow(TimeSunrise + TimeSunset,3.0) + TimeMidnight));
+	//	light_col = mix(light_col, vec3(0.5), rainStrength);
 
-		light_col = mix(light_col,vec3(sqrt(dot(light_col,light_col)))*vec3(0.25,0.32,0.4),rainx);
-		light_col = pow(light_col,mix(vec3(1.0 / 5.0),vec3(0.5), pow(TimeSunrise + TimeSunset,3.0) + TimeMidnight));
-		light_col = mix(light_col, vec3(0.5), rainStrength);
-
-	//
-		vec3 viewSpacePos = normalize(convertCameraSpaceToScreenSpace(fragpos));
-		vec3 halfVector2 = normalize(lightVector + viewSpacePos);
 		float normalDotEye = dot(normal2, normalize(fragpos));
-		float f0 = mix(0.1,0.8, gold);
-		float trueFresnel = schlickFresnel(dot(halfVector2, viewSpacePos), f0);
 
-		vec3 fresnel = pow(vec3(clamp(pow(1.0 + normalDotEye, 1.0),0.0,1.0)),vec3(1.0));
+		vec3 fresnel = vec3(saturate(pow(1.0 + normalDotEye, 1.0)));
 		fresnel.y = clamp(pow(1.0 + normalDotEye, 0.75),0.0,1.0);
 
 		normalDotEye = dot(normal, normalize(fragpos));
@@ -1236,59 +1291,56 @@ void main() {
 
 			fresnel.y *= iswater;
 
-			vec3 waterFogClr = getSkyColor();
+			vec3 waterFogClr = getSkyColor()*2;
 
-			waterFogClr = mix(waterFogClr + mix(vec3(0.0,waterFogClr.g * 0.5 * pow(depthMap, 0.2),0.0),vec3(0.0), pow(rainStrength, 0.75)),
-			(waterFogClr + mix(vec3(0.0,waterFogClr.g,0.0) * 0.75 * light_col, vec3(0.0), pow(rainStrength, 0.75))) * light_col * 3.0,
-			vec3(calcWaterSSS(normal2)) * transition_fading) * 0.75 * mix(0.5,1.0,pow(depthMap, 0.2));
+			waterFogClr = mix(waterFogClr + mix(vec3(0.0,waterFogClr.g * 0.5 * pow(depthMap, 0.2),0.0),vec3(0.0), pow(rainStrength, 0.75)), (waterFogClr + mix(vec3(0.0,waterFogClr.g,0.0) * 0.75 * light_col, vec3(0.0), pow(rainStrength, 0.75))) * light_col * 3.0, vec3(calcWaterSSS(normal2)) * transition_fading) * 0.75 * mix(0.5,1.0,pow(depthMap, 0.2));
 
 			color.rgb = pow(mix(pow(color, vec3(0.4545)), pow(waterFogClr, vec3(0.4545)) * sky_lightmap,pow(fresnel.y,1.0)*iswater*(1-isEyeInWater)), vec3(2.2));
 		#endif
 
 	#ifdef REFLECTIONS
+			vec4 reflection = vec4(0.0);
+			vec3 specColor = mix(vec3(1.0), rawAlbedo, specular.g);
 
-		light_col = light_col * mix(4.0,10.0,(TimeSunrise + TimeSunset) * transition_fading);
+			vec3 getSky = getSkyReflection(mix(reflectedVector2, reflectedVector, istransparent + iswater + ice), color.rgb)*float(land2);
+			getSky *= fresnel.x;
+			float specularTime = sunSpecTime(0.0);
+			float specularTime1 = sunSpecTime(1.0);
+			float spec = sunSpec(sunVec, fragpos, normal2, 1.0) * specularTime * (istransparent + iswater + ice)*2;
+						spec += sunSpec(sunVec, fragpos, normal, 1.0) * specularTime * (1.0 - (istransparent + iswater + ice))*2;
 
-		vec4 reflection = vec4(0.0);
-		vec3 specColor = mix(vec3(1.0), vec3(1, 0.84, 0), gold);
+						spec += sunSpec(moonVec, fragpos, normal2, 50.0) * specularTime1 * (istransparent + iswater) * 0.001;
+						spec += sunSpec(moonVec, fragpos, normal2, 1.0) * specularTime1 * (istransparent + iswater) * 0.3;
 
-		vec3 getSky = getSkyReflection(mix(reflectedVector2, reflectedVector, istransparent + iswater));
-		getSky *= trueFresnel;
+			getSky += spec* (light_col*5.0);
+	//		getSky *= specColor;
+	//		getSky *= specmap+iswater+istransparent+ice;
+			if (iswater > 0.9 || istransparent > 0.9 || ice > 0.9) {
+				#ifdef WATER_REFLECTIONS
+				reflection = raytrace(fragpos, normal, getSky, reflectedVector, fresnel.x);
+				reflection.rgb = mix(getSky * reflectionSkyLight, reflection.rgb, reflection.a);
+				reflection.a = 1.0;
+				color.rgb += reflection.rgb;
+				#endif
+			} else if(float(land) > 0.9) {
 
-		float spec = sunSpec(sunVec, fragpos, normal2, 1.0) * (1.0 - TimeMidnight) * (1.0 - isEyeInWater) * (1.0 - rainStrength) * float(pow(sky_lightmap, 50.0) > 0.1) * (istransparent + iswater);
-		spec += sunSpec(sunVec, fragpos, normal, 1.0) * (1.0 - TimeMidnight) * (1.0 - isEyeInWater) * (1.0 - rainStrength) * float(pow(sky_lightmap, 50.0) > 0.1) * (1.0 - (istransparent + iswater));
+				reflection = raytrace(fragpos, normal, getSky, reflectedVector2, fresnel.x);
+				reflection.rgb = mix(getSky * reflectionSkyLight, reflection.rgb, reflection.a)*(1-translucent);
+				reflection.a = 1.0;
+				reflection.rgb *= specColor;
 
-		spec += sunSpec(moonVec, fragpos, normal2, 100.0) * (TimeMidnight) * (1.0 - isEyeInWater) * (1.0 - rainStrength) * float(pow(sky_lightmap, 50.0) > 0.1) * (istransparent + iswater) * 0.001;
-		spec += sunSpec(moonVec, fragpos, normal2, 1.0) * (TimeMidnight) * (1.0 - isEyeInWater) * (1.0 - rainStrength) * float(pow(sky_lightmap, 50.0) > 0.1) * (istransparent + iswater) * 0.01;
+				#ifdef RAIN_REFLECTIONS
 
-		getSky += spec * light_col ;
+					float rainPuddles = getRainPuddles(1.0, 0.0);
+				//	color = vec3(rainPuddles);
+					color.rgb += pow(reflection.rgb, vec3(2.2))*reflection.a*clamp(pow(iswet, 10.0), 0.0, 1.0)*(1.0-specmap) * (rainPuddles + .05*(1-(rainPuddles)))* 15.0 *(1-iswater)*(1-isEyeInWater);
+				#endif
 
-		if (iswater > 0.9 || istransparent > 0.9) {
-			#ifdef WATER_REFLECTIONS
-			reflection = raytrace(fragpos, normal, getSky, reflectedVector, trueFresnel);
-			reflection.rgb = mix(getSky * reflectionSkyLight, reflection.rgb, reflection.a);
-			reflection.a = 1.0;
-			color.rgb += reflection.rgb;
-			#endif
-		} else {
-
-			reflection = raytrace(fragpos, normal, getSky, reflectedVector2, trueFresnel);
-			reflection.rgb = mix(getSky * reflectionSkyLight, reflection.rgb, reflection.a)*(1-translucent);
-			reflection.a = 1.0;
-			reflection.rgb *= specColor;
-
-			#ifdef RAIN_REFLECTIONS
-
-				float rainPuddles = getRainPuddles(1.0, 0.0);
-
-				color.rgb += pow(reflection.rgb, vec3(2.2))*reflection.a*clamp(pow(iswet, 10.0), 0.0, 1.0)*(1.0-specmap) * (rainPuddles + .05*(1-(rainPuddles)))* 15.0 *(1-iswater)*(1-isEyeInWater);
-			#endif
-
-			#ifdef SPECULAR_REFLECTIONS
-				color.rgb += (pow(reflection.rgb, vec3(1))*trueFresnel*reflection.a)*specmap*(1-iswater);
-		//		color = reflection.rgb;
-			#endif
-		}
+				#ifdef SPECULAR_REFLECTIONS
+					color.rgb += (pow(reflection.rgb, vec3(1))*fresnel.x*reflection.a)*specmap*(1-iswater);
+			//		color = reflection.rgb;
+				#endif
+			}
 
 	#endif
 	#ifdef FOG
@@ -1297,7 +1349,7 @@ void main() {
 		if (!land)color.rgb = mix(color,getRainFogColor(),pow(rainx,4.0));
 	#endif
 
-	vec3 forwardRenderingAlbedo = renderGaux2(color, texcoord.st);
+	vec3 forwardRenderingAlbedo = renderGaux2(color, texcoord.st, light_col);
 
 	color = forwardRenderingAlbedo;
 
@@ -1314,7 +1366,7 @@ void main() {
 
 	#ifdef VOLUMETRIC_CLOUDS
 		vec3 threeDimClouds = rayMarching(color, land, fragpos2, worldposition.xyz);
-		threeDimClouds = renderGaux2(threeDimClouds, refractionTC);
+		threeDimClouds = renderGaux2(threeDimClouds, refractionTC, light_col);
 
 		color = color.rgb = (threeDimClouds - forwardRenderingAlbedo) + color;
 	#endif
@@ -1348,13 +1400,12 @@ void main() {
 		visiblesun /= nb;
 
 	}
-
-		color.rgb = getColorCorrection(color,land);
+	  color += dynamicExposure(color);
+	//	color.rgb = getColorCorrection(color,land);
 
 	//color = mix(color, vec3(1.0),vec3(clamp(exp(-depth * 5.0),0.0,1.0)) * iswater * pow(getRainPuddles(20.0, frameTimeCounter / 2000.0),1.0));
-
 /* DRAWBUFFERS:0 */
 
-	gl_FragData[0] = vec4(color.rgb / MAX_COLOR_RANGE,visiblesun);
+	gl_FragData[0] = vec4(color / MAX_COLOR_RANGE,visiblesun);
 
 }

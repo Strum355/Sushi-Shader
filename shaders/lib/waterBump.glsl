@@ -1,4 +1,4 @@
-float hash(vec2 p) {
+float hash1(vec2 p) {
   return fract(1e4 * sin(17.0 * p.x + p.y * 0.1) * (0.1 + abs(sin(p.y * 13.0 + p.x))));
 }
 
@@ -7,10 +7,10 @@ float noise2D(vec2 x) {
   vec2 f = fract(x);
 
 	// Four corners in 2D of a tile
-	float a = hash(i);
-  float b = hash(i + vec2(1.0, 0.0));
-  float c = hash(i + vec2(0.0, 1.0));
-  float d = hash(i + vec2(1.0, 1.0));
+	float a = hash1(i);
+  float b = hash1(i + vec2(1.0, 0.0));
+  float c = hash1(i + vec2(0.0, 1.0));
+  float d = hash1(i + vec2(1.0, 1.0));
 
   // Simple 2D lerp using smoothstep envelope between the values.
 	// return vec3(mix(mix(a, b, smoothstep(0.0, 1.0, f.x)),
@@ -40,10 +40,8 @@ float fbm(vec2 x, vec2 movement, int octaves) {
 
 float getWaterBump(vec2 posxz, float istransparent) {
 	float rad = 0.8;
-	mat2 rotate = mat2(
-	vec2(cos(rad), -sin(rad)),
-	vec2(sin(rad), cos(rad))
-	);
+	mat2 rotate = mat2( vec2(cos(rad), -sin(rad)),
+              	       vec2(sin(rad), cos(rad)) );
 
 	vec2 movement = vec2(-abs(frameTimeCounter/2000),abs(frameTimeCounter/2000)) * waveM;
 	vec2 coord 	= posxz.xy * vec2(0.6,1.4) * rotate * waveZ;
@@ -60,7 +58,7 @@ float getWaterBump(vec2 posxz, float istransparent) {
 	//if (iswater > 0.5) noise += noise2(coord.xy * 1.5 + movement * 500.0) * 1.0 * waveS;
 	//noise += fract(sin(dot(posxz.xy, vec2(18.9898f + movement.x, 28.633f + movement.y))) * 4378.5453f) * 0.005 * waveS;
 
-	return pow(0.0 + noise, 1.0);
+	return noise;
 }
 
 vec3 waterNormals(vec2 posxz, float transparent){
