@@ -6,20 +6,9 @@
 //***************************ADJUSTABLE VARIABLES//***************************
 //***************************ADJUSTABLE VARIABLES//***************************
 
-//***************************SHADOWS***************************//
-	const int 		shadowMapResolution 	= 4096;		//[516 1024 2048 4096]	//shadowmap resolution
-	const float 	shadowDistance 				= 180;		//[50 120 180 250] //draw distance of shadows
-
-	#define SHADOW_DARKNESS 3 //[0.0 0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0]	//shadow darkness levels, lower values mean darker shadows, see .vsh for colors
-	#define COLOURED_SHADOWS //Makes shadows from transparent blocks coloured by it's source.
-
-	#define SHADOW_FILTER						//smooth shadows
-
 //***************************LIGHTNING***************************//
 	#define DYNAMIC_HANDLIGHT
 		#define HANDLIGHT_AMOUNT 1.0
-
-	#define SUNLIGHTAMOUNT 10	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0]	//change sunlight strength , see .vsh for colors.
 
 	//Torch Color//
 	#define TORCH_COLOR 1.0,0.4,0.1  	//Torch Color RGB - Red, Green, Blue
@@ -32,19 +21,12 @@
 	#define ATTENUATION 1.0
 	#define MIN_LIGHT 0.000
 
-	#define NIGHT_DESATURATION
-
 //***************************VISUALS***************************//
 
-	//#define SSAO //High fps hit. Adds occlusion shading to corners
+	//#define SSAO
 	const int nbdir = 6;	           //qualtiy
 	const float sampledir = 6;	      //quality
 	const float ssaorad = 2.5;	 //strength
-
-//***************************VOLUMETRIC LIGHT***************************//
-	#define VOLUMETRIC_LIGHT
-		#define VL_QUALITY 	1.0	//[0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0]	  		// Quality of the Volumetric Light. 1.0 is default, 10.0 recommended for quality, 20.0 best quality you can get. But eats a lot of FPS.
-		#define VL_DISTANCE 32.0 //[16.0 32.0 64.0 128.0 256.0 512.0]		// The draw distance of Volumetric Light
 
 //***************************BUILD IN FUNCTIONS***************************//
 
@@ -84,7 +66,6 @@ varying float handItemLight;
 varying float eyeAdapt;
 varying float moonVisibility;
 
-uniform float aspectRatio;
 uniform sampler2DShadow shadowtex0;
 uniform sampler2DShadow shadowtex1;
 uniform sampler2DShadow shadowcolor;
@@ -105,6 +86,7 @@ uniform vec3 sunPosition;
 uniform vec3 cameraPosition;
 uniform float near;
 uniform float far;
+uniform float aspectRatio;
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float rainStrength;
@@ -275,67 +257,6 @@ vec3 torchcolor2 = vec3(TORCH_COLOR2)*TORCH_INTENSITY;
 
 vec3 specular = texture2D(gaux3,texcoord.xy).rgb;
 
-const vec2 shadow_offsets[60] = vec2[60]  (  vec2(0.06120777f, -0.8370339f),
-	 	 																				 vec2(0.09790099f, -0.5829314f),
-																					   vec2(0.247741f, -0.7406831f),
-																						 vec2(-0.09391049f, -0.9929391f),
-																						 vec2(0.4241214f, -0.8359816f),
-																						 vec2(-0.2032944f, -0.70053f),
-																						 vec2(0.2894208f, -0.5542058f),
-																						 vec2(0.2610383f, -0.957112f),
-																						 vec2(0.4597653f, -0.4111754f),
-																						 vec2(0.1003582f, -0.2941186f),
-																						 vec2(0.3248212f, -0.2205462f),
-																						 vec2(0.4968775f, -0.6096044f),
-																						 vec2(0.770794f, -0.5416877f),
-																						 vec2(0.6429226f, -0.261653f),
-																						 vec2(0.6138752f, -0.7684944f),
-																						 vec2(-0.06001971f, -0.4079638f),
-																						 vec2(0.08106154f, -0.07295965f),
-																						 vec2(-0.1657472f, -0.2334092f),
-																						 vec2(-0.321569f, -0.4737087f),
-																						 vec2(-0.3698382f, -0.2639024f),
-																						 vec2(-0.2490126f, -0.02925519f),
-																						 vec2(-0.4394466f, -0.06632736f),
-																						 vec2(-0.6763983f, -0.1978866f),
-																						 vec2(-0.5428631f, -0.3784158f),
-																						 vec2(-0.3475675f, -0.9118061f),
-																						 vec2(-0.1321516f, 0.2153706f),
-																						 vec2(-0.3601919f, 0.2372792f),
-																						 vec2(-0.604758f, 0.07382818f),
-																						 vec2(-0.4872904f, 0.4500539f),
-																						 vec2(-0.149702f, 0.5208581f),
-																						 vec2(-0.6243932f, 0.2776862f),
-																						 vec2(0.4688022f, 0.04856517f),
-																						 vec2(0.2485694f, 0.07422727f),
-																						 vec2(0.08987152f, 0.4031576f),
-																						 vec2(-0.353086f, 0.7864715f),
-																						 vec2(-0.6643087f, 0.5534591f),
-																						 vec2(-0.8378839f, 0.335448f),
-																						 vec2(-0.5260508f, -0.7477183f),
-																						 vec2(0.4387909f, 0.3283032f),
-																						 vec2(-0.9115909f, -0.3228836f),
-																						 vec2(-0.7318214f, -0.5675083f),
-																						 vec2(-0.9060445f, -0.09217478f),
-																						 vec2(0.9074517f, -0.2449507f),
-																						 vec2(0.7957709f, -0.05181496f),
-																						 vec2(-0.1518791f, 0.8637156f),
-																						 vec2(0.03656881f, 0.8387206f),
-																						 vec2(0.02989202f, 0.6311651f),
-																						 vec2(0.7933047f, 0.4345242f),
-																						 vec2(0.3411767f, 0.5917205f),
-																						 vec2(0.7432346f, 0.204537f),
-																						 vec2(0.5403291f, 0.6852565f),
-																						 vec2(0.6021095f, 0.4647908f),
-																						 vec2(-0.5826641f, 0.7287358f),
-																						 vec2(-0.9144157f, 0.1417691f),
-																						 vec2(0.08989539f, 0.2006399f),
-																						 vec2(0.2432684f, 0.8076362f),
-																						 vec2(0.4476317f, 0.8603768f),
-																						 vec2(0.9842657f, 0.03520538f),
-																						 vec2(0.9567313f, 0.280978f),
-																						 vec2(0.755792f, 0.6508092f));
-
 float orenNayar(vec3 pos, vec3 lvector, vec3 normal, float spec, float roughness) {
 
     vec3 v = normalize(pos);
@@ -364,20 +285,6 @@ float orenNayar(vec3 pos, vec3 lvector, vec3 normal, float spec, float roughness
 	return clamp(cos_theta_i*(a+b_term),0.0,1.0);
 }
 
-float getWaterDepth(inout positionStruct position){
-
-	vec3 uPos = vec3(.0);
-
-	float uDepth = texture2D(depthtex0,texcoord.xy).x;
-	uPos = nvec3(gbufferProjectionInverse * vec4(vec3(texcoord.xy,uDepth) * 2.0 - 1.0, 1.0));
-
-	vec3 uVec = position.fragposition.xyz-uPos;
-	float UNdotUP = abs(dot(normalize(uVec),normal));
-	float depth = sqrt(dot(uVec,uVec))*UNdotUP;
-
-	return depth;
-
-}
 
 vec3 calcExposure(vec3 color, lightMapStruct lightMap) {
          float maxx = 1.0;
@@ -390,51 +297,6 @@ vec3 calcExposure(vec3 color, lightMapStruct lightMap) {
          return color.rgb;
 }
 
-
-// dirived from: http://devlog-martinsh.blogspot.nl/2011/03/glsl-8x8-bayer-matrix-dithering.html
-float find_closest(vec2 pos)
-{
-	const int ditherPattern[64] = int[64](
-		0, 32, 8, 40, 2, 34, 10, 42,
-		48, 16, 56, 24, 50, 18, 58, 26,
-		12, 44, 4, 36, 14, 46, 6, 38,
-		60, 28, 52, 20, 62, 30, 54, 22,
-		3, 35, 11, 43, 1, 33, 9, 41,
-		51, 19, 59, 27, 49, 17, 57, 25,
-		15, 47, 7, 39, 13, 45, 5, 37,
-		63, 31, 55, 23, 61, 29, 53, 21);
-
-    vec2 positon = floor(mod(vec2(texcoord.s * viewWidth,texcoord.t * viewHeight), 8.0f));
-
-	int dither = ditherPattern[int(positon.x) + int(positon.y) * 8];
-
-	return float(dither) / 64.0f;
-}
-
-float find_closest_calc(vec2 pos, float c0)
-{
-	const int ditherPattern[64] = int[64](
-		0, 32, 8, 40, 2, 34, 10, 42,
-		48, 16, 56, 24, 50, 18, 58, 26,
-		12, 44, 4, 36, 14, 46, 6, 38,
-		60, 28, 52, 20, 62, 30, 54, 22,
-		3, 35, 11, 43, 1, 33, 9, 41,
-		51, 19, 59, 27, 49, 17, 57, 25,
-		15, 47, 7, 39, 13, 45, 5, 37,
-		63, 31, 55, 23, 61, 29, 53, 21);
-
-    vec2 positon = floor(mod(vec2(texcoord.s * viewWidth,texcoord.t * viewHeight), 8.0f));
-	float samples = float(1024);
-	int dither = ditherPattern[int(positon.x) + int(positon.y) * 8];
-	float limit = float(dither)/(64.0*samples);
-
-	float c = 0.0;
-	for(float i = 0; i < samples+1; i++){
-		if (c0 > limit+(i-1)/samples) c = i/samples;
-	}
-
-	return c;
-}
 
 
 float noisepattern(vec2 pos, float sample) {
@@ -486,104 +348,7 @@ float getFresnelPow(in lightMapStruct lightmap)
 	return pow(1.0-(specular.b+specular.g)/2.0,1.25+lightmap.isWetness*0.75)*3.5;
 }
 
-float getDistordFactor(vec4 worldposition){
-	vec2 pos1 = abs(worldposition.xy * 1.165);
 
-	float distb = pow(pow(pos1.x, 8.) + pow(pos1.y, 8.), 1.0 / 8.0);
-	return (1.0 - SHADOW_MAP_BIAS) + distb * SHADOW_MAP_BIAS;
-}
-
-vec4 biasedShadows(vec4 worldposition){
-
-	float distortFactor = getDistordFactor(worldposition);
-
-	worldposition.xy /= distortFactor*0.97;
-	worldposition = worldposition * vec4(0.5,0.5,0.2,0.5) + vec4(0.5,0.5,0.5,0.5);
-
-	return worldposition;
-}
-
-vec4 getShadowWorldPos(in float shadowdepth, vec2 texcoord){
-
-	vec4 sfragposition = nvec4(convertScreenSpaceToWorldSpace(texcoord.st,shadowdepth));
-
-  if (isEyeInWater > 0.9)
-   sfragposition.xy *= 0.817;
-
-	vec4 sworldposition = vec4(0.0);
-		sworldposition = gbufferModelViewInverse * sfragposition;
-
-		sworldposition = shadowModelView * sworldposition;
-		sworldposition = shadowProjection * sworldposition;
-		sworldposition /= sworldposition.w;
-
-	return sworldposition;
-
-}
-
-#ifdef VOLUMETRIC_LIGHT
-
-float getVolumetricRays() {
-
-	///////////////////////Setting up functions///////////////////////
-
-		vec3 rSD = vec3(0.0);
-			rSD.x = 0.0;
-			rSD.y = 6.0 / VL_QUALITY;
-			rSD.z = find_closest(texcoord.st);
-
-
-		rSD.z *= rSD.y;
-
-		float maxDist = (VL_DISTANCE);
-		float minDist = (0.01);
-			minDist += rSD.z;
-
-		float weight = (maxDist / rSD.y);
-
-		vec2 diffthresh = vec2(0.0005, -0.001);	// Fixes light leakage from walls
-
-		vec4 worldposition = vec4(0.0);
-
-		for (minDist; minDist < maxDist;) {
-
-		///////////////////////MAKING VL NOT GO THROUGH WALLS///////////////////////
-
-			if (getDepth(pixeldepth) < minDist){
-				break;
-			}
-
-		///////////////////////Getting worldpositon///////////////////////
-
-			worldposition = getShadowWorldPos(distx(minDist),texcoord.st);
-
-		///////////////////////Rescaling ShadowMaps///////////////////////
-
-			worldposition = biasedShadows(worldposition);
-
-		///////////////////////Projecting shadowmaps on a linear depth plane///////////////////////
-
-			rSD.x += (shadow2D(shadowtex1, vec3(worldposition.rg, worldposition.b + diffthresh.x )).z);
-
-			minDist = minDist + rSD.y;
-	}
-
-	///////////////////////Returning the program///////////////////////
-
-		rSD.x /= weight;
-		rSD.x *= 0.15 * maxDist / 32;
-
-		rSD.x = mix(rSD.x, clamp(rSD.x, 0.0, 0.1), dynamicExposure());
-
-		return rSD.x;
-}
-
-#else
-float getVolumetricRays(){
-
-	return 0.0;
-}
-#endif
 
 vec4 getFpos(){
 
@@ -622,150 +387,24 @@ vec3 getFragpos(in positionStruct position){
 	return nvec3(gbufferProjectionInverse * nvec4(position.texDepth * 2.0 - 1.0));
 }
 
-vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct lightMap, float translucent, in shadingStruct shadings){
+float find_closest(vec2 pos)
+{
+	const int ditherPattern[64] = int[64](
+		0, 32, 8, 40, 2, 34, 10, 42,
+		48, 16, 56, 24, 50, 18, 58, 26,
+		12, 44, 4, 36, 14, 46, 6, 38,
+		60, 28, 52, 20, 62, 30, 54, 22,
+		3, 35, 11, 43, 1, 33, 9, 41,
+		51, 19, 59, 27, 49, 17, 57, 25,
+		15, 47, 7, 39, 13, 45, 5, 37,
+		63, 31, 55, 23, 61, 29, 53, 21);
 
-		vec4 sworldposition = biasedShadows(position.sworldposition);
+    vec2 positon = floor(mod(vec2(texcoord.s * viewWidth,texcoord.t * viewHeight), 8.0f));
 
-		float distortFactor = getDistordFactor(sworldposition);
+	int dither = ditherPattern[int(positon.x) + int(positon.y) * 8];
 
-		float step = 3.0/shadowMapResolution*(1.0+rainx*5.0);
-		float NdotL = clamp(dot(normal,lightVector),0.0,1.0);
-
-		vec3 colorShading = vec3(0.0);
-		vec3 shading2 = vec3(0.0);
-
-		float noise = fract(sin(dot(texcoord.xy, vec2(18.9898f, 28.633f))) * 4378.5453f);
-		mat2 noiseM = mat2(cos(noise), -sin(noise),
-	                     sin(noise), cos(noise));
-		float diffthresh = pow(distortFactor, 4.0)/shadowMapResolution * tan(acos(max(NdotL,0.0))) + pow(max(length(position.fragposition),0.0),0.25) / shadowMapResolution * 0.5;
-		diffthresh = mix(diffthresh , 0.0003, translucent);
-		if (max(abs(sworldposition.x),abs(sworldposition.y)) < 0.99) {
-
-			if (NdotL > 0.0 || translucent > 0.9) {
-				shading *= 0.0;
-				shading2 *= 0.0;
-				colorShading *= 0.0;
-			}
-
-				int weight;
-				step = 2.625/shadowMapResolution*(1.0+rainx*5.0);
-
-					const vec2 shadowFilter[4] = vec2[4](
-					vec2(1.0,0.0),
-					vec2(-1.0,0.0),
-					vec2(0.0,1.0),
-					vec2(0.0,-1.0)
-
-				);
-
-				#ifdef SHADOW_FILTER
-
-					for (int i = 0; i < 30; i++){
-
-						shading += shadow2D(shadowtex0,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).x;
-						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).r;
-
-					#ifdef COLOURED_SHADOWS
-
-						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st + shadow_offsets[i] * step, sworldposition.z - diffthresh)).rgb;
-					#endif
-
-					weight++;
-					}
-
-					#ifdef COLOURED_SHADOWS
-						colorShading /= weight;
-					#endif
-
-					shading /= weight;
-					shading2 /= weight;
-
-				#endif
-
-
-				#ifndef SHADOW_FILTER
-						shading += shadow2D(shadowtex0,vec3(sworldposition.st, sworldposition.z - diffthresh)).x;
-
-						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st, sworldposition.z - diffthresh)).r;
-
-				#ifdef COLOURED_SHADOWS
-						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st, sworldposition.z - diffthresh)).rgb;
-						#endif
-				#endif
-
-				shading = clamp(shading, 0.0, 1.0);
-				shading2 = clamp(shading2, 0.0, 1.0);
-				colorShading = clamp(colorShading * 1.4, 0.0, 1.0);
-
-				#ifdef COLOURED_SHADOWS
-					colorShading *= shading2;
-					shading = mix(colorShading,vec3(1),shading);
-				#else
-					shading = shading2;
-				#endif
-
-			shading *= mix(clamp(pow(NdotL,1.0),0.0,1.0),1.0,translucent);
-
-			if (isEyeInWater > 0.9)
-				shading = calcExposure(shading, lightMap);
-
-		}
-
-		return shading;
-
+	return float(dither) / 64.0f;
 }
-
-vec3 getShadows1(vec3 shading, in positionStruct position, in lightMapStruct lightMap, float translucent, in shadingStruct shadings){
-
-		vec4 sworldposition = biasedShadows(position.sworldposition1);
-
-		float distortFactor = getDistordFactor(sworldposition);
-
-		float NdotL = clamp(dot(normal,lightVector),0.0,1.0)+iswater;
-
-		vec3 colorShading = vec3(0.0);
-		vec3 shading2 = vec3(0.0);
-
-		float diffthresh = pow(distortFactor, 4.0)/shadowMapResolution * tan(acos(max(NdotL,0.0))) + pow(max(length(position.fragposition),0.0),0.25) / shadowMapResolution * 0.5;
-		diffthresh = mix(diffthresh , 0.0003, translucent);
-
-		if (max(abs(sworldposition.x),abs(sworldposition.y)) < 0.99) {
-			if (NdotL > 0.0 || translucent > 0.9) {
-				shading *= 0.0+iswater;
-				shading2 *= 0.0;
-				colorShading *= 0.0;
-			}
-
-						shading += shadow2D(shadowtex0,vec3(sworldposition.st, sworldposition.z - diffthresh)).x;
-
-						shading2 += shadow2D(shadowtex1,vec3(sworldposition.st, sworldposition.z - diffthresh)).r;
-
-				#ifdef COLOURED_SHADOWS
-						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st, sworldposition.z - diffthresh)).rgb;
-				#endif
-
-				shading = clamp(shading, 0.0, 1.0);
-				shading2 = clamp(shading2, 0.0, 1.0);
-				colorShading = clamp(colorShading * 1.4, 0.0, 1.0);
-
-				#ifdef COLOURED_SHADOWS
-					colorShading *= shading2;
-					shading = mix(colorShading,vec3(1),shading);
-				#else
-					shading = shading2;
-				#endif
-
-			shading *= mix(clamp(pow(NdotL,1.0),0.0,1.0),1.0,translucent);
-
-			if (isEyeInWater > 0.9)
-				shading = calcExposure(shading, lightMap);
-
-		}
-
-		return shading;
-
-}
-
 
 #ifdef SSAO
 float getSSAO() {
@@ -850,31 +489,8 @@ float getRoughness(in lightMapStruct lightMap, in float iswater){
 		return roughness;
 }
 
-float getSSS(in positionStruct position, in float translucent){
-
-			float sss_transparency = mix(0,1,translucent);		//subsurface scattering amount
-
-			float sss = 0.0;
-			vec3 npos = normalize(position.fragposition.xyz);
-
-			sss += pow(max(dot(npos, lightVector),0.0),25.0)*sss_transparency*translucent*10.0;
-
-			return sss;
-}
-
-float getSunlightDirect(in shadingStruct shading, in positionStruct position, in float translucent){
-
-			float sunlight_direct = 1.0;
-
-				sunlight_direct = orenNayar(position.fragposition.xyz, lightVector, normal, shading.specMap, shading.roughness * 0.2);
-				sunlight_direct = mix(sunlight_direct,0.5,translucent);
-
-		return sunlight_direct;
-}
-
 vec3 getEmessiveGlow(vec3 color, float emissive, float islava){
-			float brightness = mix(50, 50, TimeMidnight);
-			color.rgb += (color * ((brightness)) ) * pow(sqrt(dot(color.rgb,color.rgb)), 5.0 ) * (emissive + (hand * handItemLight));
+			color.rgb += (color * ((30)) ) * pow(sqrt(dot(color.rgb,color.rgb)), 5.0 ) * (emissive + (hand * handItemLight));
 
 			return color;
 }
@@ -887,33 +503,20 @@ vec3 getSaturation(vec3 color, float saturation)
 	return color;
 }
 
-float getRainSky(in positionStruct position){
-
-	float wpos = max(position.wpos.y - texcoord.y , 1.0);
-	float horizon = (max(pow(max(1.0 - wpos/700.0, 0.01), 8.0), 0.0));
-
-	return horizon;
-}
-
 vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in lightMapStruct lightMap){
 
 			float NdotL = dot(lightVector, normal);
 			float NdotUp = dot(upVec, normal);
 
-			float visibility = pow(lightMap.skyLightMap, 2.0);
+			float visibility = lightMap.skyLightMap;
 
 		//Apply different lightmaps to image
 
-		vec3 light_col =  mix(pow(sunColor,vec3(3.0)),moonColor,moonVisibility)*(1-rainx);
-
-			vec3 Sunlight_lightmap = lightColor * shading.shadows * (SUNLIGHTAMOUNT) * (1.0 - rainx*0.995) * shading.sunLD * transition_fading;
-
 			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight*0.75)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.3)*pow(visibility,2.0)*bouncefactor;
-			float skyLightAmount = mix(0.1, 0.01, saturate(rainx+TimeMidnight));
+			vec3 sky_light = 5.0*pow(ambient_color,vec3(1.0))*(1-rainx*0.3)*visibility*bouncefactor;
 			//Add all light elements together
-			return (((sky_light+0.001) * (skyLightAmount) + shading.torchmap) + Sunlight_lightmap*(1-emissive) +  shading.sss * Sunlight_lightmap *0.01) * shading.ao;
+			return (((sky_light+0.1)*0.1 + shading.torchmap)) * shading.ao;
 }
 
 vec3 nightDesaturation(vec3 inColor){
@@ -941,8 +544,6 @@ void main() {
 	position.fragposition 		= getFpos();
 	position.fragposition1 		= getFpos1();
 	position.wpos 						= getWpos(position);
-	position.sworldposition 	= getShadowWorldPos(pixeldepth, texcoord.st);
-	position.sworldposition1 			= getShadowWorldPos(pixeldepth1, texcoord.st);
 
 	position.texDepth 				= texcoordDepth;
 	position.fragpos 					= getFragpos(position);
@@ -950,22 +551,21 @@ void main() {
 	//*ADD LIGHTMAPS--------------------------------------------------------------*//
 
 	lightMap.skyLightMap 			= getSkyLightMap();
-	lightMap.shadowLightMap 	= getShadowLightMap(lightMap);
 	lightMap.isWetness 				= getIsWet(lightMap);
 	lightMap.fresnel 					= getFresnelPow(lightMap);
 
 	//*ADD SHADINGS--------------------------------------------------------------*//
 
-	shading.shadows 					= getShadows(vec3(1.0), position, lightMap, translucent, shading);
-	shading.shadows1 					= getShadows1(vec3(1.0), position, lightMap, translucent, shading);
+	//shading.shadows 					= getShadows(vec3(1.0), position, lightMap, translucent, shading);
+	//shading.shadows1 					= getShadows1(vec3(1.0), position, lightMap, translucent, shading);
 	shading.ao 								= getSSAO();
 	shading.specMap 					= getSpecmap(lightMap);
-	shading.volumeLight 			= getVolumetricRays();
+	//shading.volumeLight 			= getVolumetricRays();
 	shading.handlight 				= getHandLight(hand, position);
 	shading.torchmap 					= getTorchMap(position,shading);
 	shading.roughness 				= getRoughness(lightMap, iswater);
-	shading.sss 							= getSSS(position, translucent);
-	shading.sunLD 						= getSunlightDirect(shading, position, translucent);
+	//shading.sss 							= getSSS(position, translucent);
+	//shading.sunLD 						= getSunlightDirect(shading, position, translucent);
 	shading.eGlow 						= getEmessiveGlow(color, emissive, islava);
 	shading.finalShading 			= getFinalShading(position, shading, lightMap);
 
@@ -982,9 +582,6 @@ void main() {
 	if (land2) {
 		color = emissive_glow;
 		color = finalShading * color;
-		#ifdef NIGHT_DESATURATION
-		color = nightDesaturation(color);
-		#endif
 	} else {
 		color = mix(color,vec3(0.0),rainStrength);
 	}
@@ -992,9 +589,8 @@ void main() {
 
 	//*BAKING COLOR AND VL TO GCOLOR--------------------------------------------------------------*//
 
-/* DRAWBUFFERS:071 */
+/* DRAWBUFFERS:01 */
 
-	gl_FragData[0] = vec4(color/MAX_COLOR_RANGE, volumeRays);
-	gl_FragData[1] = vec4(shading.shadows1, 1.0);
+	gl_FragData[0] = vec4(color/MAX_COLOR_RANGE, 1.0);
 	gl_FragData[2] = vec4(passThroughCol, 1.0);
 }

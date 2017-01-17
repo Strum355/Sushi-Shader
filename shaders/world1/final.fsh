@@ -9,13 +9,8 @@
 //***************************BLOOM***************************//
 
 #define BLOOM
-	#define HQ_BLOOM //higher quality blurring, subtle effect
+	#define HQ_BLOOM
 	#define BLOOM_STRENGTH 5.0		//basic multiplier
-	#define FOG_SCATTER 3.0 //[0.1 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0] how much fog scattering occurs during rain
-
-#define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
-
-#define RAIN_DROP
 
 //***************************END OF ADJUSTABLE VARIABLES***************************//
 //***************************END OF ADJUSTABLE VARIABLES***************************//
@@ -109,81 +104,13 @@ float find_closest(vec2 pos)
 
 	return float(dither) / 64.0f;
 }
+
 vec3 saturate(vec3 value){
 	return clamp(value, 0.0, 1.0);
 }
 
-
-vec4 getTpos(){
-
-	vec4 tpos = vec4(sunPosition,1.0)*gbufferProjection;
-	return vec4(tpos.xyz/tpos.w,1.0);
-
-}
-
-vec2 getLightPos(){
-		vec2 pos1 = getTpos().xy/getTpos().z;
-		return pos1*0.5+0.5;
-
-}
-
-#ifdef RAIN_DROP
-float waterDrop (vec2 tc) {
-	vec2 drop = vec2(0.0,fract(frameTimeCounter/750.0));
-	tc.x *= 10;
-	float noise = texture2D(noisetex,(tc+drop)/2).x;
-	noise += texture2D(noisetex,(tc+drop)).x/2;
-	noise += texture2D(noisetex,(tc+drop)*2).x/4;
-	noise += texture2D(noisetex,(tc+drop)*4).x/8;
-	noise += texture2D(noisetex,(tc+drop*0.5)).x/2;
-	noise += texture2D(noisetex,(tc+drop*0.5)*2).x/4;
-	noise += texture2D(noisetex,(tc+drop*0.5)*4).x/8;
-	float dropstrength = max(noise-1.8,0.0);
-	float wdrop = 0.1;
-	float waterD = (1.0 - (pow(wdrop,dropstrength)));
-	waterD *= clamp((eyeBrightnessSmooth.y-220)/15.0,0.0,1.0)*rainStrength;
-	return waterD;
-}
-#endif
-
-vec2 customTexcoord(){
-	vec2 fake_refract;
-	vec2 fake_refract2;
-
-	vec2 texC = texcoord.st;
-
-	//texC = texC * 0.5 + 0.5;									// Inverting texcoord
-	//texC = mix(texC,floor(texC * 2.0) / 2.0,2.0) * 2.0;		//
-
-	//float pixelSize = 20.0;													// Pixelizing shader
-	//																			//
-	//texC = floor(texC * pixelSize) / pixelSize + (1.0 / pow(pixelSize,1.4));	//
-
-	//texC = mix(texC, (texC * 2.0 - getLightPos() * 2.0) * 0.0 * 0.5 + getLightPos(), (1.0 / (distance((texC * 2.0 - getLightPos() * 2.0) * 10.0 * 0.5 + getLightPos(), getLightPos()) - 0.35))); //Black hole shader
-	//texC = mix(texC, (texC * 2.0 - 1.0) * 0.0 * 0.5 + 0.5, (1.0 / (distance((texC * 2.0 - 1.0) * 10.0 * 0.5 + 0.5, vec2(0.5)) - 0.35))); //Black hole shader
-
-	//texC = mix(texC, vec2(0.5), pow(distance(texC, vec2(0.5)),3.0) * 5.0); //Warp Drive Shader
-
-	//texC = mix(texC, normalize(texC - vec2(0.5)) * 0.5 + 0.5, clamp(pow(distance(texC, vec2(0.5)),10.0) * 50.0,0.0,1.0));
-
-	vec2 custom;
-
-//	fake_refract = vec2(sin(frameTimeCounter*2.0 + texC.x*0.0 + texC.y*25.0),cos(frameTimeCounter*2.0 + texC.y*0.0 + texC.x*50.0)) * 2.5 *isEyeInWater;
-	#ifdef RAIN_DROP
-		fake_refract2 = vec2(sin(frameTimeCounter*1.0 + texC.x*0.0 + texC.y*100.0),cos(frameTimeCounter*1.0 + texC.y*0.0 + texC.x*200.0))*waterDrop(texC.xy/300)*5 ;
-	#endif
-
-	vec2 refracts = (fake_refract + fake_refract2) / 500.0;
-
-	custom = refracts;
-
-	return texC.st + custom;
-}
-
-vec2 Tc = customTexcoord();
-
-vec4 aux = texture2D(gaux1, Tc.xy);
-float depth = texture2D(gdepthtex, Tc.xy).x;
+vec4 aux = texture2D(gaux1, texcoord.xy);
+float depth = texture2D(gdepthtex, texcoord.xy).x;
 
 float sky_lightmap = aux.r;
 
@@ -248,26 +175,27 @@ vec4 BicubicTexture(in sampler2D tex, in vec2 coord)
 
 #ifdef BLOOM
 
-vec3 getBloom(in vec2 bCoord, Bloom b){
+	vec3 getBloom(in vec2 bCoord, Bloom b){
 
-	vec3 blur = vec3(0);
+		vec3 blur = vec3(0);
 		#ifdef HQ_BLOOM
 		b.blur1 = pow(BicubicTexture(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
 		b.blur2 = pow(BicubicTexture(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
 		b.blur3 = pow(BicubicTexture(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
 		b.blur4 = pow(BicubicTexture(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
 		b.blur5 = pow(BicubicTexture(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
-	#else
+		#else
 		b.blur1 = pow(texture2D(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
 		b.blur2 = pow(texture2D(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
 		b.blur3 = pow(texture2D(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
 		b.blur4 = pow(texture2D(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
 		b.blur5 = pow(texture2D(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
-	#endif
+		#endif
 		blur = b.blur1 + b.blur2 + b.blur3 + b.blur4 + b.blur5;
 
-	return blur;
-}
+		return blur;
+	}
+
 #endif
 
 void NJTonemap(inout vec3 color){
@@ -289,19 +217,11 @@ vec3 robobo1221sTonemap(vec3 color){
 }
 
 void main() {
-	vec3 color = texture2D(gcolor,Tc.st).rgb * MAX_COLOR_RANGE;
+	vec3 color = texture2D(gcolor,texcoord.st).rgb * MAX_COLOR_RANGE;
 
-	vec3 pos1 = vec3(Tc.st, texture2D(depthtex0, Tc.st).r);
-	pos1 = nvec3(gbufferProjectionInverse * nvec4(pos1 * 2.0 - 1.0));
-	float fogDensity = 1-saturate(exp(-pow(length(pos1)/100, 2.0)));
 	#ifdef BLOOM
-		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2,saturate(0.1+fogDensity*rainStrength));
+		color.rgb = mix(color,getBloom(texcoord.st, bloom)*MAX_COLOR_RANGE*0.2,saturate(0.1));
 	#endif
-
-		if (isEyeInWater > 0.9){
-			color *= vec3(1.0, 3.0, 4.0)/2;
-		}
-
 
 	color += find_closest(texcoord.st)/255; //some dithering to help with banding
 	color = robobo1221sTonemap(color);
