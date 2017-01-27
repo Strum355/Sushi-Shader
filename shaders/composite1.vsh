@@ -1,7 +1,6 @@
 #version 120
 
 varying vec4 texcoord;
-varying vec3 sunlight;
 varying vec3 moonlight;
 varying vec3 lightVector;
 varying vec3 ambient_color;
@@ -21,37 +20,6 @@ uniform vec3 upPosition;
 
 //raining
 float rainx = clamp(rainStrength, 0.0f, 1.0f)/1.0f;
-
-////////////////////sunlight color////////////////////
-////////////////////sunlight color////////////////////
-////////////////////sunlight color////////////////////
-const ivec4 ToD[25] = ivec4[25](ivec4(0,160,90,44), //hour,r,g,b
-								ivec4(1,160,90,44),
-								ivec4(2,160,90,44),
-								ivec4(3,160,90,44),
-								ivec4(4,160,90,44),
-								ivec4(5,160,90,44),
-								ivec4(6,160,117,85),
-								ivec4(7,190,140,120),
-								ivec4(8,190,150,150),
-								ivec4(9,190,150,150),
-								ivec4(10,190,150,150),
-								ivec4(11,190,150,150),
-								ivec4(12,190,150,150),
-								ivec4(13,190,150,150),
-								ivec4(14,190,150,150),
-								ivec4(15,190,150,150),
-								ivec4(16,190,150,150),
-								ivec4(17,190,140,120),
-								ivec4(18,160,117,85),
-								ivec4(19,160,90,44),
-								ivec4(20,160,90,44),
-								ivec4(21,160,90,44),
-								ivec4(22,160,90,44),
-								ivec4(23,160,90,44),
-								ivec4(24,160,90,44));
-
-
 
 	////////////////////ambient color////////////////////
 	////////////////////ambient color////////////////////
@@ -118,14 +86,6 @@ void main() {
 	float hour = worldTime/1000.0+6.0;
 	if (hour > 24.0) hour = hour - 24.0;
 
-
-	ivec4 temp = ToD[int(floor(hour))];
-	ivec4 temp2 = ToD[int(floor(hour)) + 1];
-
-	sunlight = mix(vec3(temp.yzw),vec3(temp2.yzw),(hour-float(temp.x))/float(temp2.x-temp.x))/255.0f;
-
-	//sunlight.b *= 0.95;
-
 	moonlight =  vec3(0.7,0.7,1.0)/2.0 * 0.012;
 
 	ivec4 tempa = ToD2[int(floor(hour))];
@@ -138,5 +98,5 @@ void main() {
 	vec3 ambient_color2 = (sky_color)*2.;
 	ambient_color2 = pow(normalize(ambient_color),vec3(1./2.2))*sqrt(dot(ambient_color,ambient_color));
 
-	cloudColor = sunlight*sunVisibility*sqrt(dot(ambient_color2,ambient_color2)) + ambient_color2*(1-moonVisibility*0.8) + 2.0*moonlight*moonVisibility;
+	cloudColor = sunVisibility*sqrt(dot(ambient_color2,ambient_color2)) + ambient_color2*(1-moonVisibility*0.8) + 2.0*moonlight*moonVisibility;
 }

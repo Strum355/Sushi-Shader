@@ -10,13 +10,8 @@ uniform sampler2D gcolor;
 
 uniform float aspectRatio;
 uniform float viewWidth;
-uniform int worldTime;
-uniform ivec2 eyeBrightnessSmooth;
-
-float timefract = worldTime;
 
 float pw = 1.0/ viewWidth;
-float TimeMidnight = ((clamp(timefract, 12000.0, 12750.0) - 12000.0) / 750.0) - ((clamp(timefract, 23000.0, 24000.0) - 23000.0) / 1000.0);
 
 vec3 makeBloom(float lod,vec2 offset){
 

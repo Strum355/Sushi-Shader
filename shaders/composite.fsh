@@ -22,24 +22,23 @@
 	#define SUNLIGHTAMOUNT 10	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0]	//change sunlight strength , see .vsh for colors.
 
 	//Torch Color//
-	#define TORCH_COLOR 1.0,0.4,0.1  	//Torch Color RGB - Red, Green, Blue
-	#define TORCH_COLOR2 1.0,0.4,0.1  	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR 1.0,0.5,0.6  	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR2 1.0,0.6,0.2  	//Torch Color RGB - Red, Green, Blue
 
 	#define TORCH_ATTEN 5.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
 	#define TORCH_INTENSITY 0.15
 
 	//Minecraft lightmap (used for sky)
 	#define ATTENUATION 1.0
-	#define MIN_LIGHT 0.000
 
-	#define NIGHT_DESATURATION
+	#define NIGHT_DESATURATION //desaturates everything not lit up by light emitting blocks at night
 
 //***************************VISUALS***************************//
 
 	//#define SSAO //High fps hit. Adds occlusion shading to corners
 	const int nbdir = 6;	           //qualtiy
 	const float sampledir = 6;	      //quality
-	const float ssaorad = 2.5;	 //strength
+	const float ssaorad = 1.5;	 //strength
 
 //***************************VOLUMETRIC LIGHT***************************//
 	#define VOLUMETRIC_LIGHT
@@ -74,20 +73,18 @@ const int 		noiseTextureResolution  = 256;
 varying vec4 texcoord;
 
 varying vec3 lightVector;
+varying vec3 upVec;
+varying vec3 ambient_color;
 varying vec3 sunVec;
 varying vec3 moonVec;
-varying vec3 upVec;
-varying vec3 sunlight_color;
-varying vec3 ambient_color;
-varying vec3 moonlight;
+
 varying float handItemLight;
-varying float eyeAdapt;
 varying float moonVisibility;
 
-uniform float aspectRatio;
 uniform sampler2DShadow shadowtex0;
 uniform sampler2DShadow shadowtex1;
 uniform sampler2DShadow shadowcolor;
+
 uniform sampler2D gcolor;
 uniform sampler2D composite;
 uniform sampler2D depthtex1;
@@ -96,21 +93,25 @@ uniform sampler2D gnormal;
 uniform sampler2D noisetex;
 uniform sampler2D gaux1;
 uniform sampler2D gaux3;
+
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
 uniform mat4 shadowProjection;
 uniform mat4 shadowModelView;
+
 uniform vec3 sunPosition;
-uniform vec3 cameraPosition;
+
+uniform float aspectRatio;
 uniform float near;
 uniform float far;
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float rainStrength;
 uniform float wetness;
-uniform float frameTimeCounter;
+
 uniform ivec2 eyeBrightnessSmooth;
+
 uniform int isEyeInWater;
 uniform int worldTime;
 
@@ -128,7 +129,7 @@ float comp = 1.0-near/far/far;			//distance above that are considered as sky
 	//float time = float(worldTime);
 	float transition_fading = 1.0-(clamp((timefract-12000.0)/300.0,0.0,1.0)-clamp((timefract-13000.0)/300.0,0.0,1.0) + clamp((timefract-22800.0)/200.0,0.0,1.0)-clamp((timefract-23400.0)/200.0,0.0,1.0));
 
-float rainx = clamp(rainStrength, 0.0, 1.0);
+float rainx = clamp(rainStrength, 0.0, 0.98);
 
 mat2 time = mat2(vec2(
 				((clamp(timefract, 23000.0f, 25000.0f) - 23000.0f) / 1000.0f) + (1.0f - (clamp(timefract, 0.0f, 2000.0f)/2000.0f))*transition_fading,
@@ -139,10 +140,9 @@ mat2 time = mat2(vec2(
 				((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f) - ((clamp(timefract, 23000.0f, 24000.0f) - 23000.0f) / 1000.0f))*transition_fading
 );	//time[0].xy = sunrise and noon. time[1].xy = sunset and mindight.
 
-vec3 sunColor = (vec3(1.0,0.65,0.3) * 0.5 * time[0].x * (1.0-rainStrength) +			//Sunrise
-								 vec3(1.0,1.0,1.0) * 1.0 * time[0].y * (1.0-rainStrength) +							//Noon
-								 vec3(1.0,0.6,0.2) * 0.5 * (time[1].x + time[1].y) * (1.0-rainStrength) +//Sunset
-								 vec3(0.1, 0.1, 0.1) * 0.3 * rainStrength);																//Rain
+vec3 sunColor = vec3(1.0,0.3,0.2) * 0.5 * time[0].x  +			//Sunrise
+								vec3(1.0,1.0,1.0) * 1.0 * time[0].y  +							//Noon
+								vec3(1.0,0.6,0.2) * 0.5 * (time[1].x + time[1].y);																//Rain
 
 vec3 moonColor = vec3(0.09,0.12,0.15) * (1.0-rainStrength);
 
@@ -166,6 +166,7 @@ struct shadingStruct
 	vec3 eGlow;
 	vec3 godRays;
 	vec3 finalShading;
+	vec3 ambient;
 
 } shading;
 
@@ -336,9 +337,9 @@ const vec2 shadow_offsets[60] = vec2[60]  (  vec2(0.06120777f, -0.8370339f),
 																						 vec2(0.9567313f, 0.280978f),
 																						 vec2(0.755792f, 0.6508092f));
 
-float orenNayar(vec3 pos, vec3 lvector, vec3 normal, float spec, float roughness) {
+float orenNayar(vec3 pos, vec3 lvector, vec3 normal, float spec) {
 
-    vec3 v = normalize(pos);
+  /*  vec3 v = normalize(pos);
 	vec3 l = normalize(lvector);
 	vec3 n = normalize(normal);
 
@@ -350,18 +351,43 @@ float orenNayar(vec3 pos, vec3 lvector, vec3 normal, float spec, float roughness
 	float cos_alpha = min(cos_theta_i,cos_theta_r); // alpha=max(theta_i,theta_r);
 	float cos_beta = max(cos_theta_i,cos_theta_r); // beta=min(theta_i,theta_r)
 
-	float r2 = roughness*roughness;
-	float a = 1.0 - r2;
+	float a = 1.0 ;
 	float b_term;
 
 	if(cos_phi_diff>=0.0) {
-		float b = r2;
+		float b = 1-a;
 		b_term = b*sqrt((1.0-cos_alpha*cos_alpha)*(1.0-cos_beta*cos_beta))/cos_beta*cos_phi_diff;
 		b_term = b*sin(cos_alpha)*tan(cos_beta)*cos_phi_diff;
 	}
 	else b_term = 0.0;
 
-	return clamp(cos_theta_i*(a+b_term),0.0,1.0);
+	return clamp(cos_theta_i*(a+b_term),0.0,1.0);*/
+
+	vec3 v = normalize(pos);
+	vec3 l = normalize(lvector);
+	vec3 n = normalize(normal);
+
+	float NdotL = dot(n,l);
+	float NdotV = dot(n,v);
+
+	float angleVN = acos(NdotV);
+	float angleLN = acos(NdotL);
+
+	float alpha = max(angleVN, angleLN);
+	float beta = min(angleVN, angleLN);
+	float gamma = dot(v-n*dot(v,n), l -n * dot(l,n));
+
+	float roughness2 = pow(0.7, 2.0);
+
+	float A = 1.0 - 0.5 * (roughness2 / (roughness2 + 0.57));
+	float B = 0.45 * (roughness2 / (roughness2 + 0.09));
+
+	float C = sin(alpha) * tan(beta);
+
+	float returned = max(0.0, NdotL) * (A + B * max(0.0, gamma) * C);
+
+	return returned;
+
 }
 
 float getWaterDepth(inout positionStruct position){
@@ -628,7 +654,7 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 
 		float distortFactor = getDistordFactor(sworldposition);
 
-		float step = 3.0/shadowMapResolution*(1.0+rainx*5.0);
+		float step = 3.0/shadowMapResolution*(1.0+rainx*0.2);
 		float NdotL = clamp(dot(normal,lightVector),0.0,1.0);
 
 		vec3 colorShading = vec3(0.0);
@@ -648,7 +674,7 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 			}
 
 				int weight;
-				step = 2.625/shadowMapResolution*(1.0+rainx*5.0);
+				step = 2.625/shadowMapResolution*(1.0+rainx);
 
 					const vec2 shadowFilter[4] = vec2[4](
 					vec2(1.0,0.0),
@@ -803,8 +829,161 @@ float getSSAO() {
 float getSSAO(){
 	return 1.0;
 }
-
 #endif
+
+const float pi = 3.141592653589793238462643383279502884197169;
+
+float RayleighPhase(float cosViewSunAngle)
+{
+	/*
+	Rayleigh phase function.
+			   3
+	p(θ) =	________   [1 + cos(θ)^2]
+			   16π
+	*/
+
+	return (3.0 / (16.0*pi)) * (1.0 + pow(max(cosViewSunAngle, 0.0), 2.0));
+}
+
+float hgPhase(float cosViewSunAngle, float g)
+{
+
+	/*
+	Henyey-Greenstein phase function.
+			   1		 		1 − g^2
+	p(θ) =	________   ____________________________
+			   4π		[1 + g^2 − 2g cos(θ)]^(3/2)
+	*/
+
+
+	return (1.0 / (4.0 * pi)) * ((1.0 - pow(g, 2.0)) / pow(1.0 + pow(g, 2.0) - 2.0*g * cosViewSunAngle, 1.5));
+}
+
+vec3 totalMie(vec3 lambda, vec3 K, float T, float v)
+{
+	float c = (0.2 * T ) * 10E-18;
+	return 0.434 * c * pi * pow((2.0 * pi) / lambda, vec3(v - 2.0)) * K;
+}
+
+vec3 totalRayleigh(vec3 lambda, float n, float N, float pn){
+	return (24.0 * pow(pi, 3.0) * pow(pow(n, 2.0) - 1.0, 2.0) * (6.0 + 3.0 * pn))
+	/ (N * pow(lambda, vec3(4.0)) * pow(pow(n, 2.0) + 2.0, 2.0) * (6.0 - 7.0 * pn));
+}
+
+float SunIntensity(float zenithAngleCos, float sunIntensity, float cutoffAngle, float steepness)
+{
+	return sunIntensity * max(0.0, 1.0 - exp(-((cutoffAngle - acos(zenithAngleCos))/steepness)));
+}
+
+vec3 Uncharted2Tonemap(vec3 x)
+{
+
+	float A = 1.2;
+	float B = 0.0;
+	float C = 0.6;
+	float D = 1.2;
+	float E = 0.1;
+	float F = 1.4;
+
+   return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+}
+
+vec3 ToneMap(vec3 color, vec3 sunPos) {
+    vec3 toneMappedColor;
+
+    toneMappedColor = color * 0.04;
+    toneMappedColor = Uncharted2Tonemap(toneMappedColor);
+
+    float sunfade = 1.0-clamp(1.0-exp(-(sunPos.z/500.0)),0.0,1.0);
+    toneMappedColor = pow(toneMappedColor,vec3(1.0/(1.2+(1.2*sunfade))));
+
+    return toneMappedColor;
+}
+
+//isRef = 0 for reflections, 1 for sky
+vec3 AtmosphericScattering(vec3 color, vec3 fragpos, float isRef){
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	float turbidity = 1.5;
+	float rayleighCoefficient = 2.0;
+
+	// constants for mie scattering
+	const float mieCoefficient = 0.005;
+	const float mieDirectionalG = 0.76;
+	const float v = 4.0;
+
+	// Wavelength of the primary colors RGB in nanometers.
+	const vec3 primaryWavelengths = vec3(680, 550, 450) * 1.0E-9;
+
+	float n = 1.00029; // refractive index of air
+	float N = 2.54743E25; // number of molecules per unit volume for air at 288.15K and 1013mb (sea level -45 celsius)
+	float pn = 0.03;	// depolarization factor for standard air
+
+	// optical length at zenith for molecules
+	float rayleighZenithLength = 8.4E3 ;
+	float mieZenithLength = 1.25E3;
+
+	const vec3 K = vec3(0.686, 0.678, 0.666);
+
+	float sunIntensity = 1000.0;
+
+	// earth shadow hack
+	float cutoffAngle = pi * 0.5128205128205128;
+	float steepness = 1.5;
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	// Cos Angles
+	float cosViewSunAngle = dot(normalize(fragpos.rgb), sunVec);
+	float cosSunUpAngle = dot(sunVec, upVec) * 0.95 + 0.05; //Has a lower offset making it scatter when sun is below the horizon.
+	float cosUpViewAngle = dot(upVec, normalize(fragpos.rgb));
+
+	float sunE = SunIntensity(cosSunUpAngle, sunIntensity, cutoffAngle, steepness);  // Get sun intensity based on how high in the sky it is
+
+	vec3 totalRayleigh = totalRayleigh(primaryWavelengths, n, N, pn);
+
+	vec3 rayleighAtX = totalRayleigh * rayleighCoefficient;
+
+	vec3 mieAtX = totalMie(primaryWavelengths, K, turbidity, v) * mieCoefficient;
+
+	float zenithAngle = max(0.0, cosUpViewAngle);
+
+	float rayleighOpticalLength = rayleighZenithLength / zenithAngle;
+	float mieOpticalLength = mieZenithLength / zenithAngle;
+
+	vec3 Fex = exp(-(rayleighAtX * rayleighOpticalLength + mieAtX * mieOpticalLength));
+	vec3 Fexsun = vec3(exp(-(rayleighCoefficient * 0.00002853075 * rayleighOpticalLength + mieAtX * mieOpticalLength)));
+
+	vec3 rayleighXtoEye = rayleighAtX * RayleighPhase(cosViewSunAngle);
+	vec3 mieXtoEye = mieAtX *  hgPhase(cosViewSunAngle , mieDirectionalG);
+
+	vec3 totalLightAtX = rayleighAtX + mieAtX;
+	vec3 lightFromXtoEye = rayleighXtoEye + mieXtoEye;
+
+	vec3 scattering = sunE * (lightFromXtoEye / totalLightAtX);
+
+	vec3 sky = scattering * (1.0 - Fex);
+	sky *= mix(vec3(1.0),pow(scattering * Fex,vec3(0.5)),clamp(pow(1.0-cosSunUpAngle,5.0),0.0,1.0));
+	vec3 moonlight =  vec3(0.7,0.7,1.0)/2.0 * 0.012;
+
+
+	vec3 sunMax = sunE * pow(mix(Fexsun, Fex, clamp(pow(1.0-cosUpViewAngle,4.0),0.0,1.0)), vec3(0.4545))
+	* mix(0.000005, 0.00003, clamp(pow(1.0-cosSunUpAngle,3.0),0.0,1.0)) * (1.0 - rainStrength);
+
+	float moonMax = pow(clamp(cosUpViewAngle,0.0,1.0), 0.8) * (1.0 - rainStrength);
+
+	sky = max(ToneMap(sky, sunVec), 0.0);
+
+	float nightLightScattering = pow(max(1.0 - max(cosUpViewAngle, 0.0 ),0.0), 2.0);
+	vec3 fogColor = vec3(0.3);
+	sky += pow(fogColor * 0.5, vec3(2.2)) * ((nightLightScattering + 0.5 * (1.0 - nightLightScattering)) * clamp(pow(1.0-cosSunUpAngle,35.0),0.0,1.0));
+
+	//color = mix(sky, pow(fogColor, vec3(2.2)), rainStrength);
+
+	return sky*(1-(TimeSunrise+TimeSunset)*0.2);
+}
+
 
 #ifdef DYNAMIC_HANDLIGHT
 float getHandLight(in float hand, in positionStruct position){
@@ -837,18 +1016,6 @@ vec3 getTorchMap(in positionStruct position, in shadingStruct shading){
 	return Torchlight_lightmap;
 }
 
-float getRoughness(in lightMapStruct lightMap, in float iswater){
-
-
-		float roughness = mix(1.0-(pow(specular.g,2.0))+specular.b+lightMap.isWetness*specular.g*0.5,0.05,iswater);
-		if (specular.r+specular.g+specular.b > 1.0/255.0) {
-			} else if (iswater > 0.09) {
-				} else {
-					roughness = 0.0;
-				}
-
-		return roughness;
-}
 
 float getSSS(in positionStruct position, in float translucent){
 
@@ -866,7 +1033,7 @@ float getSunlightDirect(in shadingStruct shading, in positionStruct position, in
 
 			float sunlight_direct = 1.0;
 
-				sunlight_direct = orenNayar(position.fragposition.xyz, lightVector, normal, shading.specMap, shading.roughness * 0.2);
+				sunlight_direct = orenNayar(position.fragposition.xyz, lightVector, normal, shading.specMap);
 				sunlight_direct = mix(sunlight_direct,0.5,translucent);
 
 		return sunlight_direct;
@@ -879,22 +1046,6 @@ vec3 getEmessiveGlow(vec3 color, float emissive, float islava){
 			return color;
 }
 
-vec3 getSaturation(vec3 color, float saturation)
-{
-	saturation -= 1.0;
-	color = mix(color,vec3(dot(color,vec3(1.0/3.0))),vec3(-saturation));
-
-	return color;
-}
-
-float getRainSky(in positionStruct position){
-
-	float wpos = max(position.wpos.y - texcoord.y , 1.0);
-	float horizon = (max(pow(max(1.0 - wpos/700.0, 0.01), 8.0), 0.0));
-
-	return horizon;
-}
-
 vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in lightMapStruct lightMap){
 
 			float NdotL = dot(lightVector, normal);
@@ -904,23 +1055,22 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 
 		//Apply different lightmaps to image
 
-		vec3 light_col =  mix(pow(sunColor,vec3(3.0)),moonColor,moonVisibility)*(1-rainx);
+		vec3 light_col =  mix(pow(sunColor,vec3(5.0)),moonColor,moonVisibility)*(1-rainx);
 
-			vec3 Sunlight_lightmap = lightColor * shading.shadows * (SUNLIGHTAMOUNT) * (1.0 - rainx*0.995) * shading.sunLD * transition_fading;
+			vec3 Sunlight_lightmap = (lightColor * shading.shadows * (SUNLIGHTAMOUNT)  * shading.sunLD * transition_fading)* (1.0 - rainx);
 
-			float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
+			//float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
-			vec3 sky_light = SHADOW_DARKNESS*pow(ambient_color*(1-TimeMidnight*0.75)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.3)*pow(visibility,2.0)*bouncefactor;
+			vec3 sky_light = SHADOW_DARKNESS*pow(shading.ambient*(1-TimeMidnight*0.75)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.3)*pow(visibility,2.0);
 			float skyLightAmount = mix(0.1, 0.01, saturate(rainx+TimeMidnight));
 			//Add all light elements together
-			return (((sky_light+0.001) * (skyLightAmount) + shading.torchmap) + Sunlight_lightmap*(1-emissive) +  shading.sss * Sunlight_lightmap *0.01) * shading.ao;
+			return (((sky_light+0.05) * (skyLightAmount) + shading.torchmap) + Sunlight_lightmap*(1-emissive) +  shading.sss * Sunlight_lightmap *0.01) * shading.ao;
 }
-
 vec3 nightDesaturation(vec3 inColor){
-	float lightmap =  1*pow(1-torch_lightmap, 3.0)*(1-getHandLight(hand, position)*2);
-	vec3 nightColor = mix(vec3(0.25, 0.35, 0.7), vec3(1.0), emissive);
-	vec3 desatColor = vec3(dot(inColor, vec3(1.0)));
-	float mixAmount = saturate((lightmap));
+		float lightmap =  1*pow(1-torch_lightmap, 3.0)*(1-getHandLight(hand, position)*2);
+		vec3 nightColor = mix(vec3(0.25, 0.35, 0.7), vec3(1.0), emissive);
+		vec3 desatColor = vec3(dot(inColor, vec3(1.0)));
+		float mixAmount = saturate((lightmap));
 
 	return mix(mix(inColor*torchcolor2*20, desatColor*nightColor, mixAmount), inColor, saturate(TimeNoon+TimeSunset+TimeSunrise));
 }
@@ -963,10 +1113,10 @@ void main() {
 	shading.volumeLight 			= getVolumetricRays();
 	shading.handlight 				= getHandLight(hand, position);
 	shading.torchmap 					= getTorchMap(position,shading);
-	shading.roughness 				= getRoughness(lightMap, iswater);
 	shading.sss 							= getSSS(position, translucent);
 	shading.sunLD 						= getSunlightDirect(shading, position, translucent);
 	shading.eGlow 						= getEmessiveGlow(color, emissive, islava);
+	shading.ambient  					= AtmosphericScattering(color, upVec, 0);
 	shading.finalShading 			= getFinalShading(position, shading, lightMap);
 
 	//*SHADINGS--------------------------------------------------------------*//
@@ -989,9 +1139,7 @@ void main() {
 		color = mix(color,vec3(0.0),rainStrength);
 	}
 	color = pow(color,vec3(1.0 / 2.2));
-
 	//*BAKING COLOR AND VL TO GCOLOR--------------------------------------------------------------*//
-
 /* DRAWBUFFERS:071 */
 
 	gl_FragData[0] = vec4(color/MAX_COLOR_RANGE, volumeRays);

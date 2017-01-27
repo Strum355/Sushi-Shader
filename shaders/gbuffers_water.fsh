@@ -19,7 +19,6 @@ varying vec4 lmcoord;
 varying vec3 binormal;
 varying vec3 normal;
 varying vec3 tangent;
-varying vec3 viewVector;
 varying vec3 wpos;
 varying float mat;
 varying float iswater;
@@ -27,7 +26,6 @@ varying float viewdistance;
 varying vec4 verts;
 
 uniform sampler2D texture;
-uniform sampler2D noisetex;
 uniform float frameTimeCounter;
 
 float istransparent = float(mat > 0.4 && mat < 0.42);
@@ -35,7 +33,7 @@ float ice = float(mat > 0.09 && mat < 0.11);
 
 float waveZ = mix(mix(3.0,0.25,1-istransparent), 8.0, ice);
 float waveM = mix(0.0,2.0,1-istransparent+ice);
-float waveS = mix(0.1,1.5,1-istransparent+ice);
+float waveS = mix(0.1,1.0,1-istransparent+ice);
 
 vec4 cubic(float x)
 {
@@ -102,9 +100,9 @@ float smoothStep(in float edge0, in float edge1, in float x) {
 
 #ifdef PARALLAX_WATER
 
-vec2 paralaxCoords(vec3 pos, vec3 tangentVector, float istransparent) {
+vec2 paralaxCoords(vec3 pos, vec3 tangentVector) {
 
-	float waterHeight = getWaterBump(pos.xz - pos.y, istransparent) * 5.0;
+	float waterHeight = getWaterBump(pos.xz - pos.y) * 5.0;
 
 	vec3 paralaxCoord = vec3(0.0, 0.0, 1.0);
 	vec3 stepSize = vec3(waveS, waveS, 1.0);
@@ -114,7 +112,7 @@ vec2 paralaxCoords(vec3 pos, vec3 tangentVector, float istransparent) {
 		paralaxCoord.xy = mix(paralaxCoord.xy, paralaxCoord.xy + step.xy, clamp((paralaxCoord.z - waterHeight) / (stepSize.z * 0.2f / (-tangentVector.z + 0.05f)), 0.0f, 1.0));
 		paralaxCoord.z += step.z;
 		vec3 paralaxPosition = pos + vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
-		waterHeight = getWaterBump(paralaxPosition.xz - paralaxPosition.y, istransparent) * 0.0;
+		waterHeight = getWaterBump(paralaxPosition.xz - paralaxPosition.y) * 0.0;
 	}
 	pos += vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
 	return pos.xz - pos.y;
@@ -161,7 +159,7 @@ void main() {
 		vec4 modelView = gl_ModelViewMatrix * verts;
 		vec3 tangentVector = normalize(tbnMatrix * modelView.xyz);
 
-		posxz.xz = paralaxCoords(posxz, tangentVector, istransparent);
+		posxz.xz = paralaxCoords(posxz, tangentVector);
 	#endif
 
 	vec3 bump = waterNormals(posxz.xz - posxz.y, istransparent);

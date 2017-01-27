@@ -9,8 +9,7 @@
 //***************************BLOOM***************************//
 
 #define BLOOM
-	#define HQ_BLOOM //higher quality blurring, subtle effect
-	#define BLOOM_STRENGTH 5.0		//basic multiplier
+	#define BLOOM_STRENGTH 1.0		//[0.1 0.5 1.0] basic multiplier
 	#define FOG_SCATTER 3.0 //[0.1 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0] how much fog scattering occurs during rain
 
 #define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
@@ -24,22 +23,15 @@
 const bool		gcolorMipmapEnabled		= 	true; //gcolor texture mipmapping
 
 varying vec4 texcoord;
-varying vec3 sunlight;
-uniform vec3 sunPosition;
-uniform vec3 moonPosition;
-varying vec3 ambient_color;
-varying vec3 lightVector;
 
 uniform sampler2D gcolor;
 uniform sampler2D composite;
 uniform sampler2D noisetex;
 uniform sampler2D gdepthtex;
-uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D gaux1;
 uniform mat4 gbufferProjection;
 uniform mat4 gbufferProjectionInverse;
-uniform float aspectRatio;
 uniform float near;
 uniform float far;
 uniform float viewWidth;
@@ -66,14 +58,6 @@ float TimeSunrise  = ((clamp(timefract, 23000.0, 24000.0) - 23000.0) / 1000.0) +
 float TimeNoon     = ((clamp(timefract, 0.0, 4000.0)) / 4000.0) - ((clamp(timefract, 8000.0, 12000.0) - 8000.0) / 4000.0);
 float TimeSunset   = ((clamp(timefract, 8000.0, 12000.0) - 8000.0) / 4000.0) - ((clamp(timefract, 12000.0, 12750.0) - 12000.0) / 750.0);
 float TimeMidnight = ((clamp(timefract, 12000.0, 12750.0) - 12000.0) / 750.0) - ((clamp(timefract, 23000.0, 24000.0) - 23000.0) / 1000.0);
-
-float ld(float depth) {
-    return (2.0 * near) / (far + near - depth * (far - near));
-}
-
-float distx(float dist){
-	return (far * (dist - near)) / (dist * (far - near));
-}
 
 float luma(vec3 color) {
 	return dot(color,vec3(0.299, 0.587, 0.114));
@@ -111,20 +95,6 @@ float find_closest(vec2 pos)
 }
 vec3 saturate(vec3 value){
 	return clamp(value, 0.0, 1.0);
-}
-
-
-vec4 getTpos(){
-
-	vec4 tpos = vec4(sunPosition,1.0)*gbufferProjection;
-	return vec4(tpos.xyz/tpos.w,1.0);
-
-}
-
-vec2 getLightPos(){
-		vec2 pos1 = getTpos().xy/getTpos().z;
-		return pos1*0.5+0.5;
-
 }
 
 #ifdef RAIN_DROP
@@ -251,19 +221,11 @@ vec4 BicubicTexture(in sampler2D tex, in vec2 coord)
 vec3 getBloom(in vec2 bCoord, Bloom b){
 
 	vec3 blur = vec3(0);
-		#ifdef HQ_BLOOM
-		b.blur1 = pow(BicubicTexture(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
-		b.blur2 = pow(BicubicTexture(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
-		b.blur3 = pow(BicubicTexture(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
-		b.blur4 = pow(BicubicTexture(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
-		b.blur5 = pow(BicubicTexture(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
-	#else
-		b.blur1 = pow(texture2D(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
-		b.blur2 = pow(texture2D(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
-		b.blur3 = pow(texture2D(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
-		b.blur4 = pow(texture2D(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
-		b.blur5 = pow(texture2D(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
-	#endif
+	b.blur1 = pow(texture2D(composite,bCoord/pow(2.0,2.0) + vec2(0.0,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*3.0;
+	b.blur2 = pow(texture2D(composite,bCoord/pow(2.0,3.0) + vec2(0.3,0.0)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*4.0;
+	b.blur3 = pow(texture2D(composite,bCoord/pow(2.0,4.0) + vec2(0.0,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*5.0;
+	b.blur4 = pow(texture2D(composite,bCoord/pow(2.0,5.0) + vec2(0.1,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*6.0;
+	b.blur5 = pow(texture2D(composite,bCoord/pow(2.0,6.0) + vec2(0.2,0.3)).rgb,vec3(mix(2.2, 1.5, rainStrength)))*7.0;
 		blur = b.blur1 + b.blur2 + b.blur3 + b.blur4 + b.blur5;
 
 	return blur;
@@ -291,20 +253,22 @@ vec3 robobo1221sTonemap(vec3 color){
 void main() {
 	vec3 color = texture2D(gcolor,Tc.st).rgb * MAX_COLOR_RANGE;
 
-	vec3 pos1 = vec3(Tc.st, texture2D(depthtex0, Tc.st).r);
+	vec3 pos1 = vec3(Tc.st, texture2D(depthtex1, Tc.st).r);
 	pos1 = nvec3(gbufferProjectionInverse * nvec4(pos1 * 2.0 - 1.0));
-	float fogDensity = 1-saturate(exp(-pow(length(pos1)/100, 2.0)));
+	float fogDensity = 1-saturate(exp(-pow(length(pos1)/100, FOG_SCATTER)));
 	#ifdef BLOOM
-		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2,saturate(0.1+fogDensity*rainStrength));
+		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2*BLOOM_STRENGTH,saturate(0.1+fogDensity*rainStrength));
 	#endif
 
 		if (isEyeInWater > 0.9){
 			color *= vec3(1.0, 3.0, 4.0)/2;
 		}
 
-
+	color.r -= 0.01*TimeMidnight;
 	color += find_closest(texcoord.st)/255; //some dithering to help with banding
 	color = robobo1221sTonemap(color);
+
+	//TODO fix rain sky. final and composite1 problematic
 
 	gl_FragColor = vec4(color.rgb, 1.0);
 

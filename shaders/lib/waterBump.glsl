@@ -25,7 +25,7 @@ float noise2D(vec2 x) {
 
 float fbm(vec2 x, vec2 movement, int octaves) {
 	float v = 01.0;
-	float a = 1.0;
+	float a = 0.6;
 	vec2 shift = vec2(100.0);
 	// Rotate to reduce axial bias
   mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
@@ -38,7 +38,7 @@ float fbm(vec2 x, vec2 movement, int octaves) {
 }
 
 
-float getWaterBump(vec2 posxz, float istransparent) {
+float getWaterBump(vec2 posxz) {
 	float rad = 0.8;
 	mat2 rotate = mat2( vec2(cos(rad), -sin(rad)),
               	       vec2(sin(rad), cos(rad)) );
@@ -66,11 +66,11 @@ vec3 waterNormals(vec2 posxz, float transparent){
 
 		float deltaPos = 0.22;
 
-		float h0 = getWaterBump(coord, transparent);
-		float h1 = getWaterBump(coord + vec2(deltaPos,0.0), transparent);
-		float h2 = getWaterBump(coord + vec2(-deltaPos,0.0), transparent);
-		float h3 = getWaterBump(coord + vec2(0.0,deltaPos), transparent);
-		float h4 = getWaterBump(coord + vec2(0.0,-deltaPos), transparent);
+		float h0 = getWaterBump(coord);
+		float h1 = getWaterBump(coord + vec2(deltaPos,0.0));
+		float h2 = getWaterBump(coord + vec2(-deltaPos,0.0));
+		float h3 = getWaterBump(coord + vec2(0.0,deltaPos));
+		float h4 = getWaterBump(coord + vec2(0.0,-deltaPos));
 
 		float xDelta = ((h1-h0)+(h0-h2))/deltaPos;
 		float yDelta = ((h3-h0)+(h0-h4))/deltaPos;

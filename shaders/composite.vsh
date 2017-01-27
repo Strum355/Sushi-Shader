@@ -4,10 +4,10 @@ varying vec4 texcoord;
 varying vec3 lightVector;
 varying vec3 sunlight_color;
 varying vec3 ambient_color;
+varying vec3 sunVec;
 varying float handItemLight;
 varying float eyeAdapt;
 varying vec3 moonlight;
-varying vec3 sunVec;
 varying vec3 moonVec;
 varying vec3 upVec;
 
@@ -101,6 +101,8 @@ void main() {
 
 	texcoord = gl_MultiTexCoord0;
 
+	sunVec = normalize(sunPosition);
+
 	if (worldTime < 12700 || worldTime > 23250) {
 		lightVector = normalize(sunPosition);
 	} else {
@@ -156,23 +158,11 @@ void main() {
 		handItemLight = 1.0;
 	}
 
-	sunVec = normalize(sunPosition);
 	moonVec = normalize(-sunPosition);
 	upVec = normalize(upPosition);
 
 	float MdotU = dot(moonVec,upVec);
 	moonVisibility = pow(clamp(MdotU+0.1,0.0,0.1)/0.1,2.0);
-
-	vec3 wUp = (gbufferModelView * vec4(vec3(0.0,1.0,0.0),0.0)).rgb;
-	vec3 wS1 = (gbufferModelView * vec4(normalize(vec3(3.5,1.0,3.5)),0.0)).rgb;
-	vec3 wS2 = (gbufferModelView * vec4(normalize(vec3(-3.5,1.0,3.5)),0.0)).rgb;
-	vec3 wS3 = (gbufferModelView * vec4(normalize(vec3(3.5,1.0,-3.5)),0.0)).rgb;
-	vec3 wS4 = (gbufferModelView * vec4(normalize(vec3(-3.5,1.0,-3.5)),0.0)).rgb;
-
-	eyeAdapt = 1.;
-	eyeAdapt = (2.0-min(sqrt(dot(((wUp) + (wS1) + (wS2) + (wS3) + (wS4))*2.,((wUp) + (wS1) + (wS2) + (wS3) + (wS4))*2.))/sqrt(3.)*2.,eyeBrightnessSmooth.y/255.0*0.2))*(1-rainStrength*0.5);
-
-	moonlight =  vec3(0.7,0.7,1.0)/2.0 * 0.012;
 
 	float hour = worldTime/1000.0+6.0;
 	if (hour > 24.0) hour = hour - 24.0;
@@ -180,8 +170,6 @@ void main() {
 
 	ivec4 temp = ToD[int(floor(hour))];
 	ivec4 temp2 = ToD[int(floor(hour)) + 1];
-
-	sunlight_color = mix(vec3(temp.yzw),vec3(temp2.yzw),(hour-float(temp.x))/float(temp2.x-temp.x))/255.0f;
 
 	ivec4 tempa = ToD2[int(floor(hour))];
 	ivec4 tempa2 = ToD2[int(floor(hour)) + 1];

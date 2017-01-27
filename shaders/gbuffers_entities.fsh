@@ -14,7 +14,7 @@ uniform vec3 sunPosition;
 uniform vec3 moonPosition;
 
 uniform int worldTime;
-uniform int entityHurt;
+uniform vec4 entityColor;
 
 //////////////////////////////VOID MAIN//////////////////////////////
 //////////////////////////////VOID MAIN//////////////////////////////
@@ -27,7 +27,8 @@ void main() {
 	vec2 adjustedTexCoord = texcoord.st;
 	vec3 lightVector;
 	vec4 albedo = texture2D(texture,adjustedTexCoord)*color;
-	albedo.rgb = mix(albedo.rgb,vec3(1,0,0),float(entityHurt) * 0.003);
+			 albedo.rgb = mix(albedo.rgb,vec3(1,0,0),entityColor.a);
+
 	vec4 frag2 = vec4(normal*0.5+0.5, 1.0f);
 
 	float dirtest = 0.0;
