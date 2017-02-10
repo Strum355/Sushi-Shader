@@ -23,10 +23,10 @@
 
 	//Torch Color//
 	#define TORCH_COLOR 1.0,0.5,0.6  	//Torch Color RGB - Red, Green, Blue
-	#define TORCH_COLOR2 1.0,0.6,0.2  	//Torch Color RGB - Red, Green, Blue
+	#define TORCH_COLOR2 1.0,0.65,0.4  	//Torch Color RGB - Red, Green, Blue
 
 	#define TORCH_ATTEN 5.0					//how much the torch light will be attenuated (decrease if you want the torches to cover a bigger area)
-	#define TORCH_INTENSITY 0.15
+	#define TORCH_INTENSITY 0.25
 
 	//Minecraft lightmap (used for sky)
 	#define ATTENUATION 1.0
@@ -129,7 +129,7 @@ float comp = 1.0-near/far/far;			//distance above that are considered as sky
 	//float time = float(worldTime);
 	float transition_fading = 1.0-(clamp((timefract-12000.0)/300.0,0.0,1.0)-clamp((timefract-13000.0)/300.0,0.0,1.0) + clamp((timefract-22800.0)/200.0,0.0,1.0)-clamp((timefract-23400.0)/200.0,0.0,1.0));
 
-float rainx = clamp(rainStrength, 0.0, 0.98);
+float rainx = clamp(rainStrength, 0.0, 1.0);
 
 mat2 time = mat2(vec2(
 				((clamp(timefract, 23000.0f, 25000.0f) - 23000.0f) / 1000.0f) + (1.0f - (clamp(timefract, 0.0f, 2000.0f)/2000.0f))*transition_fading,
@@ -140,13 +140,92 @@ mat2 time = mat2(vec2(
 				((clamp(timefract, 12000.0f, 12750.0f) - 12000.0f) / 750.0f) - ((clamp(timefract, 23000.0f, 24000.0f) - 23000.0f) / 1000.0f))*transition_fading
 );	//time[0].xy = sunrise and noon. time[1].xy = sunset and mindight.
 
-vec3 sunColor = vec3(1.0,0.3,0.2) * 0.5 * time[0].x  +			//Sunrise
+vec3 sunColor = vec3(1.0,0.5,0.2) * 0.5 * time[0].x  +			//Sunrise
 								vec3(1.0,1.0,1.0) * 1.0 * time[0].y  +							//Noon
 								vec3(1.0,0.6,0.2) * 0.5 * (time[1].x + time[1].y);																//Rain
 
 vec3 moonColor = vec3(0.09,0.12,0.15) * (1.0-rainStrength);
 
 vec3 lightColor = mix(sunColor, moonColor*0.01, TimeMidnight);
+
+vec3 decodeNormal (vec2 encodedNormal)
+{
+    vec2 p = encodedNormal;
+
+    // Find z sign
+    float zsign = sign (1.0 - abs (p.x) - abs (p.y));
+    // Map outer triangles to center if encoded z is negative
+    float z_is_negative = max (-zsign, 0.0);
+    vec2 p_sign = sign (p);
+    p_sign = sign (p_sign + vec2 (0.5, 0.5));
+    // Reflection
+    // qr = q - 2 * n * (dot (q, n) - d) / dot (n, n)
+    p -= z_is_negative * (dot (p, p_sign) - 1.0) * p_sign;
+
+    // Convert square to unit circle
+    // We add epsilon to avoid division by zero
+    float r = abs (p.x) + abs (p.y);
+    float d = length (p) + 0.00001;
+    vec2 q = p * r / d;
+
+    // Deproject unit circle to sphere
+    float den = 2.0 / (dot (q, q) + 1.0);
+    vec3 v = vec3(den * q, zsign * (den - 1.0));
+
+    return v;
+}
+
+vec2 inverseTexel = 1.0 / vec2(viewWidth, viewHeight);
+
+vec3 decodeColortex1(sampler2D sampler) {
+
+	vec3 color = vec3(texture2D(sampler, texcoord.st).rg, 0.0);
+
+	vec2 offset = texture2D(sampler, texcoord.st + vec2(inverseTexel.s, 0.0)).rg;
+	vec2 offset1 = texture2D(sampler, texcoord.st - vec2(inverseTexel.s, 0.0)).rg;
+	vec2 offset2 = texture2D(sampler, texcoord.st + vec2(0.0, inverseTexel.t)).rg;
+	vec2 offset3 = texture2D(sampler, texcoord.st - vec2(0.0, inverseTexel.t)).rg;
+
+	vec4 white = 1.0 - abs(vec4(offset.r, offset1.r, offset2.r, offset3.r) - color.r);
+
+	color.b = dot(white, vec4(offset.g, offset1.g, offset2.g, offset3.g)) / dot(white, vec4(1.0));
+
+	color = (mod(gl_FragCoord.x, 2.0) == mod(gl_FragCoord.y, 2.0))? color.rbg:color;
+
+	color.gb -= 0.5;
+
+	return max(pow(vec3(color.r + color.g - color.b, color.r + color.b, color.r - color.g - color.b), vec3(2.2)), 0.0);
+}
+
+vec4 aux = texture2D(gaux1, texcoord.st);
+vec3 normal = texture2D(gnormal, texcoord.st).rgb*2.0-1.0;
+vec3 normal2 = decodeNormal(texture2D(composite, texcoord.st).rg);
+float pixeldepth = texture2D(depthtex1,texcoord.xy).x;
+float pixeldepth1 = texture2D(depthtex0,texcoord.xy).x;
+
+// masks
+float land 								= float(aux.g > 0.04);
+float oneMinusLand				= 1-land;
+bool land2 								= pixeldepth < comp;
+
+float iswater 						= float(aux.g > 0.04 && aux.g < 0.07);
+float translucent 				= float(aux.g > 0.3 && aux.g <= 0.4);
+float hand 								= float(aux.g > 0.75 && aux.g < 0.85);
+float islava 						= float(aux.g > 0.50 && aux.g < 0.55);
+float emissive 						= float(aux.g > 0.58 && aux.g < 0.62);
+
+vec3 texcoordDepth = vec3(texcoord.st, pixeldepth);
+
+float pw = 1.0/ viewWidth;
+float ph = 1.0/ viewHeight;
+
+float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9);
+float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9);
+
+vec3 torchcolor = vec3(TORCH_COLOR)*.1*TORCH_INTENSITY;
+vec3 torchcolor2 = vec3(TORCH_COLOR2)*TORCH_INTENSITY;
+
+vec3 specular = decodeColortex1(gaux3);
 
 struct shadingStruct
 {
@@ -239,6 +318,7 @@ vec3 getColor(){
 		return pow(texture2D(gcolor, texcoord.st).rgb, vec3(2.2));
 }
 
+
 #define DYNAMIC_EXPOSURE_AMOUNT 1.0	//[0.25 0.5 0.75 1.0 1.25 1.5 1.75 2.0 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0]	//Strength
 
 
@@ -246,52 +326,22 @@ vec3 dynamicExposure(vec3 color) {
 		return (color.rgb * clamp((-eyeBrightnessSmooth.y+230)/100.0,0.0,1.0)*2.5*(1-TimeMidnight*0.5)*(1-rainx)*DYNAMIC_EXPOSURE_AMOUNT);
 }
 
-vec4 aux = texture2D(gaux1, texcoord.st);
-vec3 normal = texture2D(gnormal, texcoord.st).rgb * 2.0f - 1.0f;
-vec3 normal2 = texture2D(composite, texcoord.st).rgb * 2.0 - 1.0;
-float pixeldepth = texture2D(depthtex1,texcoord.xy).x;
-float pixeldepth1 = texture2D(depthtex0,texcoord.xy).x;
-
-// masks
-float land 								= float(aux.g > 0.04);
-float oneMinusLand				= 1-land;
-bool land2 								= pixeldepth < comp;
-
-float iswater 						= float(aux.g > 0.04 && aux.g < 0.07);
-float translucent 				= float(aux.g > 0.3 && aux.g <= 0.4);
-float hand 								= float(aux.g > 0.75 && aux.g < 0.85);
-float islava 						= float(aux.g > 0.50 && aux.g < 0.55);
-float emissive 						= float(aux.g > 0.58 && aux.g < 0.62)+islava;
-
-vec3 texcoordDepth = vec3(texcoord.st, pixeldepth);
-
-float pw = 1.0/ viewWidth;
-float ph = 1.0/ viewHeight;
-
-float torch_lightmap = min(pow(aux.b,TORCH_ATTEN)*TORCH_INTENSITY*20.0, 0.9);
-float torch_lightmap2 = min(pow(aux.b,TORCH_ATTEN*5)*TORCH_INTENSITY*65, 0.9);
-
-vec3 torchcolor = vec3(TORCH_COLOR)*.1*TORCH_INTENSITY;
-vec3 torchcolor2 = vec3(TORCH_COLOR2)*TORCH_INTENSITY;
-
-vec3 specular = texture2D(gaux3,texcoord.xy).rgb;
-
-const vec2 shadow_offsets[60] = vec2[60]  (  vec2(0.06120777f, -0.8370339f),
-	 	 																				 vec2(0.09790099f, -0.5829314f),
-																					   vec2(0.247741f, -0.7406831f),
-																						 vec2(-0.09391049f, -0.9929391f),
-																						 vec2(0.4241214f, -0.8359816f),
-																						 vec2(-0.2032944f, -0.70053f),
-																						 vec2(0.2894208f, -0.5542058f),
-																						 vec2(0.2610383f, -0.957112f),
-																						 vec2(0.4597653f, -0.4111754f),
-																						 vec2(0.1003582f, -0.2941186f),
-																						 vec2(0.3248212f, -0.2205462f),
-																						 vec2(0.4968775f, -0.6096044f),
-																						 vec2(0.770794f, -0.5416877f),
-																						 vec2(0.6429226f, -0.261653f),
-																						 vec2(0.6138752f, -0.7684944f),
-																						 vec2(-0.06001971f, -0.4079638f),
+const vec2 shadow_offsets[60] = vec2[60]  ( vec2(0.06120777f, -0.8370339f),
+	 	 									vec2(0.09790099f, -0.5829314f),
+											vec2(0.247741f, -0.7406831f),
+											vec2(-0.09391049f, -0.9929391f),
+											vec2(0.4241214f, -0.8359816f),
+											vec2(-0.2032944f, -0.70053f),
+											vec2(0.2894208f, -0.5542058f),
+											vec2(0.2610383f, -0.957112f),
+											vec2(0.4597653f, -0.4111754f),
+											vec2(0.1003582f, -0.2941186f),
+											vec2(0.3248212f, -0.2205462f),
+											vec2(0.4968775f, -0.6096044f),
+											vec2(0.770794f, -0.5416877f),
+											vec2(0.6429226f, -0.261653f),
+											vec2(0.6138752f, -0.7684944f),
+											vec2(-0.06001971f, -0.4079638f),
 																						 vec2(0.08106154f, -0.07295965f),
 																						 vec2(-0.1657472f, -0.2334092f),
 																						 vec2(-0.321569f, -0.4737087f),
@@ -567,7 +617,7 @@ float getVolumetricRays() {
 
 		float weight = (maxDist / rSD.y);
 
-		vec2 diffthresh = vec2(0.0005, -0.001);	// Fixes light leakage from walls
+		vec2 diffthresh = vec2(0.0001, -0.001);	// Fixes light leakage from walls
 
 		vec4 worldposition = vec4(0.0);
 
@@ -716,12 +766,12 @@ vec3 getShadows(vec3 shading, in positionStruct position, in lightMapStruct ligh
 
 				#ifdef COLOURED_SHADOWS
 						colorShading += shadow2D(shadowcolor,vec3(sworldposition.st, sworldposition.z - diffthresh)).rgb;
-						#endif
+				#endif
 				#endif
 
 				shading = clamp(shading, 0.0, 1.0);
 				shading2 = clamp(shading2, 0.0, 1.0);
-				colorShading = clamp(colorShading * 1.4, 0.0, 1.0);
+				colorShading = clamp(colorShading, 0.0, 1.0);
 
 				#ifdef COLOURED_SHADOWS
 					colorShading *= shading2;
@@ -822,7 +872,7 @@ float getSSAO() {
 		ao /= (nbdir-1)*(sampledir-1);
 		//ao = noise.x;
 	}
-	ao = mix(pow(ao, 2.2 * ssaorad / (1.0 + ld(pixeldepth) * 5.0)), 1.0, min(emissive + hand, 1.0));
+	ao = mix(pow(ao, 2.2 * ssaorad / (1.0 + ld(pixeldepth) * 5.0)), 1.0, min(emissive+lava + hand, 1.0));
 	return ao;
 }
 #else
@@ -1041,7 +1091,7 @@ float getSunlightDirect(in shadingStruct shading, in positionStruct position, in
 
 vec3 getEmessiveGlow(vec3 color, float emissive, float islava){
 			float brightness = mix(50, 50, TimeMidnight);
-			color.rgb += (color * ((brightness)) ) * pow(sqrt(dot(color.rgb,color.rgb)), 5.0 ) * (emissive + (hand * handItemLight));
+			color.rgb += (color * ((brightness)) ) * pow(sqrt(dot(color.rgb,color.rgb)), 5.0 ) * (emissive +(islava*0.1)+ (hand * handItemLight));
 
 			return color;
 }
@@ -1057,14 +1107,14 @@ vec3 getFinalShading(in positionStruct position, in shadingStruct shading, in li
 
 		vec3 light_col =  mix(pow(sunColor,vec3(5.0)),moonColor,moonVisibility)*(1-rainx);
 
-			vec3 Sunlight_lightmap = (lightColor * shading.shadows * (SUNLIGHTAMOUNT)  * shading.sunLD * transition_fading)* (1.0 - rainx);
+			vec3 Sunlight_lightmap = (lightColor * shading.shadows * (SUNLIGHTAMOUNT)  * shading.sunLD * transition_fading)* (1.0 - rainx)*(1-TimeMidnight*0.7);
 
 			//float bouncefactor = sqrt((NdotUp*0.4+0.61) * pow(1.01-NdotL*NdotL,2.0)+0.5)*0.66;
 
 			vec3 sky_light = SHADOW_DARKNESS*pow(shading.ambient*(1-TimeMidnight*0.75)*(1+3*(1-TimeMidnight)),vec3(1.0))*(1-rainx*0.3)*pow(visibility,2.0);
-			float skyLightAmount = mix(0.1, 0.01, saturate(rainx+TimeMidnight));
+			float skyLightAmount = mix(0.1, 0.01, saturate(rainx+TimeMidnight))*(1-emissive);
 			//Add all light elements together
-			return (((sky_light+0.05) * (skyLightAmount) + shading.torchmap) + Sunlight_lightmap*(1-emissive) +  shading.sss * Sunlight_lightmap *0.01) * shading.ao;
+			return (((sky_light+0.001) * (skyLightAmount) + shading.torchmap) + Sunlight_lightmap*(1-emissive) +  shading.sss * Sunlight_lightmap *0.01) * shading.ao;
 }
 vec3 nightDesaturation(vec3 inColor){
 		float lightmap =  1*pow(1-torch_lightmap, 3.0)*(1-getHandLight(hand, position)*2);
@@ -1072,7 +1122,20 @@ vec3 nightDesaturation(vec3 inColor){
 		vec3 desatColor = vec3(dot(inColor, vec3(1.0)));
 		float mixAmount = saturate((lightmap));
 
-	return mix(mix(inColor*torchcolor2*20, desatColor*nightColor, mixAmount), inColor, saturate(TimeNoon+TimeSunset+TimeSunrise));
+	return mix(mix(inColor*torchcolor2*20, desatColor*nightColor, mixAmount), inColor, saturate(TimeNoon+TimeSunset+TimeSunrise-min(pow(rainx, 5.0), 0.7)));
+}
+
+vec3 getColorCorrection(vec3 color){
+
+	//Color changes depends on time//
+
+	color.b += color.b*0.1;
+	color.r -= color.r*0.15*TimeMidnight*(TimeNoon*0.4);
+	color.g -= color.g*0.08*TimeMidnight;
+
+	color.bg += color.bg*.1*(1-islava*(1-rainx));
+
+	return color.rgb;
 }
 
 ///////////////////////////////VOID MAIN///////////////////////////////
@@ -1083,8 +1146,8 @@ void main() {
 
 	//*ADD COLOR------------------------------------------------------------------*//
 
-	vec3 color 								= getColor();
-	vec3 passThroughCol				= getColor();
+	vec3 color 						= decodeColortex1(gcolor);
+	vec3 passThroughCol				= decodeColortex1(gcolor);
 	//color = vec3(1.0);
 	//*ADD POSITIONS--------------------------------------------------------------*//
 
@@ -1135,10 +1198,13 @@ void main() {
 		#ifdef NIGHT_DESATURATION
 		color = nightDesaturation(color);
 		#endif
+		if(emissive<0.9)color.rgb = getColorCorrection(color.rgb);
 	} else {
 		color = mix(color,vec3(0.0),rainStrength);
 	}
+
 	color = pow(color,vec3(1.0 / 2.2));
+	passThroughCol = pow(passThroughCol, vec3(0.4545));
 	//*BAKING COLOR AND VL TO GCOLOR--------------------------------------------------------------*//
 /* DRAWBUFFERS:071 */
 

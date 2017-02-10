@@ -23,9 +23,9 @@ float noise2D(vec2 x) {
 	return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
 }
 
-float fbm(vec2 x, vec2 movement, int octaves) {
+float fbm(vec2 x, vec2 movement, float octaves) {
 	float v = 01.0;
-	float a = 0.6;
+	float a = 1.0;
 	vec2 shift = vec2(100.0);
 	// Rotate to reduce axial bias
   mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.50));
@@ -38,7 +38,7 @@ float fbm(vec2 x, vec2 movement, int octaves) {
 }
 
 
-float getWaterBump(vec2 posxz) {
+float getWaterBump(vec2 posxz, float waterQuality) {
 	float rad = 0.8;
 	mat2 rotate = mat2( vec2(cos(rad), -sin(rad)),
               	       vec2(sin(rad), cos(rad)) );
@@ -46,7 +46,7 @@ float getWaterBump(vec2 posxz) {
 	vec2 movement = vec2(-abs(frameTimeCounter/2000),abs(frameTimeCounter/2000)) * waveM;
 	vec2 coord 	= posxz.xy * vec2(0.6,1.4) * rotate * waveZ;
 
-  int octaves = WATER_QUALITY;
+  float octaves = waterQuality;
   if (iswater < 0.5) octaves = 1;
 
 	//float noise = abs(sin(texture2D(noisetex,posxz.xy*0.001 - movement).x - sin(coord.y * 0.5 - movement.y))) * 1.5 * waveS;
@@ -60,22 +60,29 @@ float getWaterBump(vec2 posxz) {
 	return noise;
 }
 
-vec3 waterNormals(vec2 posxz, float transparent){
+vec3 waterNormals(vec2 posxz){
 
 	vec2 coord = posxz;
 
 		float deltaPos = 0.22;
 
-		float h0 = getWaterBump(coord);
-		float h1 = getWaterBump(coord + vec2(deltaPos,0.0));
-		float h2 = getWaterBump(coord + vec2(-deltaPos,0.0));
-		float h3 = getWaterBump(coord + vec2(0.0,deltaPos));
-		float h4 = getWaterBump(coord + vec2(0.0,-deltaPos));
+		/*float h0 = getWaterBump(coord, WATER_QUALITY);
+		float h1 = getWaterBump(coord + vec2(deltaPos,0.0), WATER_QUALITY);
+		float h2 = getWaterBump(coord + vec2(-deltaPos,0.0), WATER_QUALITY);
+		float h3 = getWaterBump(coord + vec2(0.0,deltaPos), WATER_QUALITY);
+		float h4 = getWaterBump(coord + vec2(0.0,-deltaPos), WATER_QUALITY);*/
+        	float wavesCenter = getWaterBump(coord, WATER_QUALITY);
+        	float wavesLeft = getWaterBump(coord + vec2(0.3, 0.0f), WATER_QUALITY);
+        	float wavesUp   = getWaterBump(coord + vec2(0.0f, 0.3), WATER_QUALITY);
 
-		float xDelta = ((h1-h0)+(h0-h2))/deltaPos;
+        	vec3 wavesNormal;
+        		 wavesNormal.r = (wavesCenter - wavesLeft)*10;
+        		 wavesNormal.g = (wavesCenter - wavesUp)*10;
+                wavesNormal.b = 1.0;
+	/*	float xDelta = ((h1-h0)+(h0-h2))/deltaPos;
 		float yDelta = ((h3-h0)+(h0-h4))/deltaPos;
 
-		vec3 wave = normalize(vec3(xDelta,yDelta,1.0-pow(abs(xDelta+yDelta),2.0)));
+		vec3 wave = normalize(vec3(xDelta,yDelta,1.0-pow(abs(xDelta+yDelta),2.0)));*/
 
-		return wave;
+		return normalize(wavesNormal);
 }

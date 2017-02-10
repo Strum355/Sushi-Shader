@@ -28,7 +28,7 @@ vec3 makeBloom(float lod,vec2 offset){
 			if (wg > 0) bloom +=(pow(texture2D(gcolor,bcoord).rgb,vec3(2.2))*wg);
 			}
 		}
-		bloom /= 49;
+		bloom /= 225;
 	}
 
 	return bloom;

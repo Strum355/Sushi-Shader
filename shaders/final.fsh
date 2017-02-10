@@ -9,7 +9,7 @@
 //***************************BLOOM***************************//
 
 #define BLOOM
-	#define BLOOM_STRENGTH 1.0		//[0.1 0.5 1.0] basic multiplier
+	#define BLOOM_STRENGTH 0.5		//[0.1 0.5 1.0] basic multiplier
 	#define FOG_SCATTER 3.0 //[0.1 0.5 1.0 1.5 2.0 2.5 3.0 3.5 4.0] how much fog scattering occurs during rain
 
 #define CALCULATE_EXPOSURE					//Makes darker spots in the water darker. How deeper, the darker it gets.
@@ -256,8 +256,9 @@ void main() {
 	vec3 pos1 = vec3(Tc.st, texture2D(depthtex1, Tc.st).r);
 	pos1 = nvec3(gbufferProjectionInverse * nvec4(pos1 * 2.0 - 1.0));
 	float fogDensity = 1-saturate(exp(-pow(length(pos1)/100, FOG_SCATTER)));
+	float bloomMix = mix(0.1, 0.05+fogDensity, rainStrength);
 	#ifdef BLOOM
-		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*0.2*BLOOM_STRENGTH,saturate(0.1+fogDensity*rainStrength));
+		color.rgb = mix(color,getBloom(Tc.st, bloom)*MAX_COLOR_RANGE*BLOOM_STRENGTH,saturate(.1));
 	#endif
 
 		if (isEyeInWater > 0.9){
@@ -268,6 +269,7 @@ void main() {
 	color += find_closest(texcoord.st)/255; //some dithering to help with banding
 	color = robobo1221sTonemap(color);
 
+	//color = getBloom(Tc.st, bloom)*MAX_COLOR_RANGE;
 	//TODO fix rain sky. final and composite1 problematic
 
 	gl_FragColor = vec4(color.rgb, 1.0);

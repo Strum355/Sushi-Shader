@@ -1,7 +1,7 @@
 #version 120
 #extension GL_ARB_shader_texture_lod : enable
 
-#define NORMAL_MAP_MAX_ANGLE 0.5
+#define NORMAL_MAP_MAX_ANGLE 1.0
 #define PARALLAX
 #define POM_MAP_RES 256.0
 #define POM_DEPTH 1.0 //[0.1 0.25 0.5 1.0 1.5 2.0 2.5 3.0] Depth of terrain parallax. Higher values may look bad with some resource packs
@@ -87,11 +87,29 @@ vec4 readNormal(in vec2 coord)
 	return texture2DGradARB(normals,fract(coord)*vtexcoordam.pq+vtexcoordam.st,dcdx,dcdy);
 }
 
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
+vec2 encodeColors(in vec3 color) {
+
+	color = clamp(color, 0.0, 1.0);
+
+	vec3 YCoCg = vec3(0.25 * color.r + 0.5 * color.g + 0.25 * color.b, 0.5 * color.r - 0.5 * color.b + 0.5, -0.25 * color.r + 0.5 * color.g - 0.25 * color.b + 0.5);
+
+	YCoCg.g = (mod(gl_FragCoord.x, 2.0) == mod(gl_FragCoord.y, 2.0))? YCoCg.b:YCoCg.g;
+
+	return YCoCg.rg;
+}
+
+vec2 encodeNormal (vec3 normal)
+{
+    vec2 p = normal.xy / (abs (normal.z) + 1.0);
+    float d = abs (p.x) + abs (p.y) + 0.00001;
+    float r = length (p);
+    vec2 q = p * r / d;
+    float z_is_negative = max (-sign (normal.z), 0.0);
+    vec2 q_sign = sign (q);
+    q_sign = sign (q_sign + vec2 (0.5, 0.5));
+    q -= z_is_negative * (dot (q, q_sign) - 1.0) * q_sign;
+    return q;
+}
 
 void main() {
 	vec4 modelView = (gl_ModelViewMatrix * vertexPos);
@@ -123,20 +141,19 @@ void main() {
 
 
 		vec3 specularity = texture2DGradARB(specular, adjustedTexCoord, dcdx, dcdy).rgb;
-	float atten = 1.0-(specularity.g);
 
-	vec4 frag2 = vec4(normal, 1.0f);
+		vec4 frag2;
 
 		vec3 bump2 = vec3((terrainH(wpos.xz + wpos.y)) * 0.2 * (rainStrength + float(mat > 0.22 && mat < 0.24) * 2.0));
 
 		vec3 bump = texture2DGradARB(normals, adjustedTexCoord, dcdx, dcdy).rgb*2.0-1.0 * (1+ bump2);
+		float bumpmult = NORMAL_MAP_MAX_ANGLE*(1.0-wetness*lmcoord.t*0.25);
 
-		float bumpmult = NORMAL_MAP_MAX_ANGLE*(1.0-wetness*lmcoord.t*0.25)*atten;
+		bump = bump * vec3(bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
 
-		bump = bump * vec3(bumpmult, bumpmult, bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
 		mat3 tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
-								  tangent.y, binormal.y, normal.y,
-						     	  tangent.z, binormal.z, normal.z);
+							  tangent.y, binormal.y, normal.y,
+						      tangent.z, binormal.z, normal.z);
 
 			frag2 = vec4(normalize(bump * tbnMatrix) * 0.5 + 0.5, 1.0);
 	vec4 c = mix(color,vec4(1.0),float(mat > 0.58 && mat < 0.62));		//fix weird lightmap bug on emissive blocks
@@ -147,9 +164,12 @@ void main() {
 		colorAlbedo.rgb = albedo*vec3(1, 0.87647058823, 0.66078431372);
 	}
 
+	vec2 outCol = encodeColors(colorAlbedo.rgb*c.rgb);
+    vec2 outSpec = encodeColors(specularity);
+	vec2 outNorm = encodeNormal(frag2.xyz);
 /* DRAWBUFFERS:0246 */
-	gl_FragData[0] = colorAlbedo *c;
-	gl_FragData[1] = frag2;
-	gl_FragData[2] = vec4((lmcoord.t), mat, lmcoord.s, 1.0);
-	gl_FragData[3] = vec4(specularity,1.0);
+	gl_FragData[0] = vec4(outCol, 0.0, colorAlbedo.a);
+	gl_FragData[1] = vec4(frag2.xyz, 1.0);
+	gl_FragData[2] = vec4(lmcoord.t, mat, lmcoord.s, 1.0);
+	gl_FragData[3] = vec4(outSpec, 0.0,1.0);
 }

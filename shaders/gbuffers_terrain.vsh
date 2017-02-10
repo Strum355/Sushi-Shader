@@ -236,7 +236,7 @@ void main() {
 	if (mc_Entity.x == 50.0 || mc_Entity.x == 62.0 || mc_Entity.x == 91.0 || mc_Entity.x == 89.0 || mc_Entity.x == 124.0 || mc_Entity.x == 138.0 || mc_Entity.x == 169.0 || mc_Entity.x == ENTITY_FIRE) mat = 0.6;
 
 	if (mc_Entity.x == ENTITY_LAVAFLOWING || mc_Entity.x == ENTITY_LAVASTILL) mat = 0.53;
-  if (mc_Entity.x == 41) mat = 0.7;
+    if (mc_Entity.x == 41) mat = 0.7;
 	/* re-rotate */
 
 	/* projectify */
@@ -274,7 +274,7 @@ void main() {
 								  tangent.y, binormal.y, normal.y,
 						     	  tangent.z, binormal.z, normal.z);
 
-  vertexPos = gl_Vertex;
+    vertexPos = gl_Vertex;
 	wpos = worldpos;
 
 	dist = sqrt(dot(gl_ModelViewMatrix * gl_Vertex,gl_ModelViewMatrix * gl_Vertex));

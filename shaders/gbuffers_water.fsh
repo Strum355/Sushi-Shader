@@ -5,6 +5,7 @@
 //////////////////////////////ADJUSTABLE VARIABLES
 
 #define PARALLAX_WATER //Gives water waves a 3D look
+	#define PARALLAX_WATER_DEPTH 2 //[2 3 4 5] defines how deep parallax water looks
 #define WATER_QUALITY 5 //[2 3 4 5] higher numbers gives better looking water
 
 	vec4 watercolor = vec4(0.05, 0.5, 0.9, 0.25); 	//water color and opacity (r,g,b,opacity)
@@ -19,13 +20,16 @@ varying vec4 lmcoord;
 varying vec3 binormal;
 varying vec3 normal;
 varying vec3 tangent;
+varying vec3 viewVector;
 varying vec3 wpos;
 varying float mat;
 varying float iswater;
 varying float viewdistance;
 varying vec4 verts;
+varying float distance;
 
 uniform sampler2D texture;
+uniform sampler2D noisetex;
 uniform float frameTimeCounter;
 
 float istransparent = float(mat > 0.4 && mat < 0.42);
@@ -33,7 +37,7 @@ float ice = float(mat > 0.09 && mat < 0.11);
 
 float waveZ = mix(mix(3.0,0.25,1-istransparent), 8.0, ice);
 float waveM = mix(0.0,2.0,1-istransparent+ice);
-float waveS = mix(0.1,1.0,1-istransparent+ice);
+float waveS = mix(0.1,1.5,1-istransparent+ice);
 
 vec4 cubic(float x)
 {
@@ -98,81 +102,96 @@ float smoothStep(in float edge0, in float edge1, in float x) {
     return t * t * (3.0f - 2.0f * t);
 }
 
-#ifdef PARALLAX_WATER
 
-vec2 paralaxCoords(vec3 pos, vec3 tangentVector) {
+vec2 parallaxCoord(vec2 pos, vec3 viewVector, float waterQuality){
+	vec2 parallaxCoord = pos;
+	vec3 stepSize = vec3(0.5);
+	float waveHeight = getWaterBump(pos, max(waterQuality, 2.0));
+	float depth = PARALLAX_WATER_DEPTH;
+	vec2 pCoord = vec2(0.0);
 
-	float waterHeight = getWaterBump(pos.xz - pos.y) * 5.0;
+	vec3 step = viewVector * stepSize;
 
-	vec3 paralaxCoord = vec3(0.0, 0.0, 1.0);
-	vec3 stepSize = vec3(waveS, waveS, 1.0);
-	vec3 step = tangentVector * stepSize;
-
-	for (int i = 0; waterHeight < paralaxCoord.z && i < 15; i++) {
-		paralaxCoord.xy = mix(paralaxCoord.xy, paralaxCoord.xy + step.xy, clamp((paralaxCoord.z - waterHeight) / (stepSize.z * 0.2f / (-tangentVector.z + 0.05f)), 0.0f, 1.0));
-		paralaxCoord.z += step.z;
-		vec3 paralaxPosition = pos + vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
-		waterHeight = getWaterBump(paralaxPosition.xz - paralaxPosition.y) * 0.0;
+	for(int i = 0; waveHeight < depth && i < 120; ++i){
+		pCoord.xy = mix(pCoord, pCoord + step.xy, clamp((depth - waveHeight) / (stepSize.z * 0.2f / (-viewVector.z + 0.05f)), 0.0f, 1.0f));
+		depth += step.z;
+		waveHeight = getWaterBump(pos + pCoord, max(waterQuality, 2.0));
 	}
-	pos += vec3(paralaxCoord.x, 0.0f, paralaxCoord.y);
-	return pos.xz - pos.y;
+
+	return parallaxCoord = pos + pCoord;
 }
 
-#endif
+vec2 encodeColors(in vec3 color) {
+
+	color = clamp(color, 0.0, 1.0);
+
+	vec3 YCoCg = vec3(0.25 * color.r + 0.5 * color.g + 0.25 * color.b, 0.5 * color.r - 0.5 * color.b + 0.5, -0.25 * color.r + 0.5 * color.g - 0.25 * color.b + 0.5);
+
+	YCoCg.g = (mod(gl_FragCoord.x, 2.0) == mod(gl_FragCoord.y, 2.0))? YCoCg.b:YCoCg.g;
+
+	return YCoCg.rg;
+}
 
 
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
-//////////////////////////////VOID MAIN//////////////////////////////
+vec2 encodeNormal (vec3 normal)
+{
+    // Project normal positive hemisphere to unit circle
+    // We project from point (0,0,-1) to the plane [0,(0,0,-1)]
+    // den = dot (l.d, p.n)
+    // t = -(dot (p.n, l.p) + p.d) / den
+    vec2 p = normal.xy / (abs (normal.z) + 1.0);
+
+    // Convert unit circle to square
+    // We add epsilon to avoid division by zero
+    float d = abs (p.x) + abs (p.y) + 0.00001;
+    float r = length (p);
+    vec2 q = p * r / d;
+
+    // Mirror triangles to outer edge if z is negative
+    float z_is_negative = max (-sign (normal.z), 0.0);
+    vec2 q_sign = sign (q);
+    q_sign = sign (q_sign + vec2 (0.5, 0.5));
+    // Reflection
+    // qr = q - 2 * n * (dot (q, n) - d) / dot (n, n)
+    q -= z_is_negative * (dot (q, q_sign) - 1.0) * q_sign;
+
+    return q;
+}
+
 
 void main() {
 
-	vec4 albedo;
-	if (iswater < 0.9){
-		albedo = texture2D(texture, texcoord.st);
-	}else{
-		albedo = watercolor;
-	}
+	vec4 albedo = texture2D(texture, texcoord.st) * color;
+		albedo = mix(albedo, watercolor, iswater);
 
 	#ifdef USE_WATER_TEXTURE
 	albedo = texture2D(texture, texcoord.xy)*color;
 	#endif
 
-
 	vec3 posxz = wpos.xyz;
-
-	vec4 frag2;
-		frag2 = vec4((normal) * 0.5f + 0.5f, 1.0f);
-	vec4 frag3;
-		frag3 = vec4((normal) * 0.5f + 0.5f, 1.0f);
-
 
 	float bumpmult = 0.1;
 
 	mat3 tbnMatrix = mat3(tangent.x, binormal.x, normal.x,
-						tangent.y, binormal.y, normal.y,
-						tangent.z, binormal.z, normal.z);
+					      tangent.y, binormal.y, normal.y,
+						  tangent.z, binormal.z, normal.z);
 
 	#ifdef PARALLAX_WATER
-		vec4 modelView = gl_ModelViewMatrix * verts;
+		vec4 modelView = normalize(gl_ModelViewMatrix * verts);
 		vec3 tangentVector = normalize(tbnMatrix * modelView.xyz);
-
-		posxz.xz = paralaxCoords(posxz, tangentVector);
+		if(iswater>0.9) posxz.xz = parallaxCoord(posxz.xz, tangentVector, 2);
 	#endif
 
-	vec3 bump = waterNormals(posxz.xz - posxz.y, istransparent);
+	vec3 bump = waterNormals(posxz.xz - posxz.y);
+		 bump = bump * vec3(bumpmult) + vec3(0.0f, 0.0f, 1.0f-bumpmult);
+	//bump.b = 1.0;
+	vec4 frag2 = vec4(normalize(bump * tbnMatrix), 1.0);
+	//frag3 = vec4(normalize(waves1(0.05) * tbnMatrix) * 0.5 + 0.5, 1.0);
 
-	bump = bump * vec3(bumpmult, bumpmult, bumpmult) + vec3(0.0f, 0.0f, 1.0f - bumpmult);
-
-	frag2 = vec4(normalize(bump * tbnMatrix) * 0.5 + 0.5, 1.0);
-	frag3 = vec4(normalize(waves1(0.05) * tbnMatrix) * 0.5 + 0.5, 1.0);
-
-
+	vec2 outNorm = encodeNormal(frag2.xyz);
 /* DRAWBUFFERS:543 */
 
 	gl_FragData[0] = albedo;
 	gl_FragData[1] = vec4(lmcoord.t, mat, lmcoord.s, 1.0);
-	gl_FragData[2] = frag2;
+	gl_FragData[2] = vec4(outNorm, 0.0, 1.0);
 }
