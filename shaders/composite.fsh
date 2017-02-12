@@ -86,7 +86,7 @@ uniform sampler2DShadow shadowtex1;
 uniform sampler2DShadow shadowcolor;
 
 uniform sampler2D gcolor;
-uniform sampler2D composite;
+//uniform sampler2D composite;
 uniform sampler2D depthtex1;
 uniform sampler2D depthtex0;
 uniform sampler2D gnormal;
@@ -148,33 +148,16 @@ vec3 moonColor = vec3(0.09,0.12,0.15) * (1.0-rainStrength);
 
 vec3 lightColor = mix(sunColor, moonColor*0.01, TimeMidnight);
 
-vec3 decodeNormal (vec2 encodedNormal)
+vec3 decode (vec2 enc)
 {
-    vec2 p = encodedNormal;
-
-    // Find z sign
-    float zsign = sign (1.0 - abs (p.x) - abs (p.y));
-    // Map outer triangles to center if encoded z is negative
-    float z_is_negative = max (-zsign, 0.0);
-    vec2 p_sign = sign (p);
-    p_sign = sign (p_sign + vec2 (0.5, 0.5));
-    // Reflection
-    // qr = q - 2 * n * (dot (q, n) - d) / dot (n, n)
-    p -= z_is_negative * (dot (p, p_sign) - 1.0) * p_sign;
-
-    // Convert square to unit circle
-    // We add epsilon to avoid division by zero
-    float r = abs (p.x) + abs (p.y);
-    float d = length (p) + 0.00001;
-    vec2 q = p * r / d;
-
-    // Deproject unit circle to sphere
-    float den = 2.0 / (dot (q, q) + 1.0);
-    vec3 v = vec3(den * q, zsign * (den - 1.0));
-
-    return v;
+    vec2 fenc = enc*4-2;
+    float f = dot(fenc,fenc);
+    float g = sqrt(1-f/4.0);
+    vec3 n;
+    n.xy = fenc*g;
+    n.z = 1-f/2;
+    return n;
 }
-
 vec2 inverseTexel = 1.0 / vec2(viewWidth, viewHeight);
 
 vec3 decodeColortex1(sampler2D sampler) {
@@ -198,8 +181,8 @@ vec3 decodeColortex1(sampler2D sampler) {
 }
 
 vec4 aux = texture2D(gaux1, texcoord.st);
-vec3 normal = texture2D(gnormal, texcoord.st).rgb*2.0-1.0;
-vec3 normal2 = decodeNormal(texture2D(composite, texcoord.st).rg);
+vec3 normal = decode(texture2D(gnormal, texcoord.st).rg);
+//vec3 normal2 = decode(texture2D(composite, texcoord.st).rg);
 float pixeldepth = texture2D(depthtex1,texcoord.xy).x;
 float pixeldepth1 = texture2D(depthtex0,texcoord.xy).x;
 
@@ -1153,6 +1136,7 @@ void main() {
 
 	position.fragposition 		= getFpos();
 	position.fragposition1 		= getFpos1();
+
 	position.wpos 						= getWpos(position);
 	position.sworldposition 	= getShadowWorldPos(pixeldepth, texcoord.st);
 	position.sworldposition1 			= getShadowWorldPos(pixeldepth1, texcoord.st);
@@ -1202,7 +1186,6 @@ void main() {
 	} else {
 		color = mix(color,vec3(0.0),rainStrength);
 	}
-
 	color = pow(color,vec3(1.0 / 2.2));
 	passThroughCol = pow(passThroughCol, vec3(0.4545));
 	//*BAKING COLOR AND VL TO GCOLOR--------------------------------------------------------------*//

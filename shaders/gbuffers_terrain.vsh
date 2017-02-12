@@ -80,7 +80,7 @@ float timefract = worldTime;
 
 
 
-float pi2wt = PI*2*(frameTimeCounter*24);
+float pi2wt = PI*2*(frameTimeCounter*24)*0;
 
 //Raining
 float rainx = clamp(rainStrength, 0.0f, 1.0f)/1.0f;

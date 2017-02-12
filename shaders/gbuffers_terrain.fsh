@@ -4,7 +4,7 @@
 #define NORMAL_MAP_MAX_ANGLE 1.0
 #define PARALLAX
 #define POM_MAP_RES 256.0
-#define POM_DEPTH 1.0 //[0.1 0.25 0.5 1.0 1.5 2.0 2.5 3.0] Depth of terrain parallax. Higher values may look bad with some resource packs
+#define POM_DEPTH 1.0 //[0.1 0.25 0.5 0.75 1.0 1.5 2.0] Depth of terrain parallax. Higher values may look bad with some resource packs
 #define OCCLUSION_POINTS 128 //[8 16 32 64 128 256 512 1024]
 
 
@@ -111,6 +111,14 @@ vec2 encodeNormal (vec3 normal)
     return q;
 }
 
+vec2 encode (vec3 n)
+{
+
+    float p = sqrt(n.z*8+8);
+    return vec2(n.xy/p + 0.5);
+}
+
+
 void main() {
 	vec4 modelView = (gl_ModelViewMatrix * vertexPos);
 	vec3 viewVector = normalize(tbnMatrix * modelView.xyz);
@@ -142,7 +150,7 @@ void main() {
 
 		vec3 specularity = texture2DGradARB(specular, adjustedTexCoord, dcdx, dcdy).rgb;
 
-		vec4 frag2;
+		vec3 frag2 = normal;
 
 		vec3 bump2 = vec3((terrainH(wpos.xz + wpos.y)) * 0.2 * (rainStrength + float(mat > 0.22 && mat < 0.24) * 2.0));
 
@@ -155,7 +163,7 @@ void main() {
 							  tangent.y, binormal.y, normal.y,
 						      tangent.z, binormal.z, normal.z);
 
-			frag2 = vec4(normalize(bump * tbnMatrix) * 0.5 + 0.5, 1.0);
+			frag2 = normalize(bump * tbnMatrix) ;
 	vec4 c = mix(color,vec4(1.0),float(mat > 0.58 && mat < 0.62));		//fix weird lightmap bug on emissive blocks
 	vec4 colorAlbedo = texture2DGradARB(texture, adjustedTexCoord, dcdx, dcdy);
 
@@ -166,10 +174,10 @@ void main() {
 
 	vec2 outCol = encodeColors(colorAlbedo.rgb*c.rgb);
     vec2 outSpec = encodeColors(specularity);
-	vec2 outNorm = encodeNormal(frag2.xyz);
+	vec2 outNorm = encode(frag2.xyz);
 /* DRAWBUFFERS:0246 */
 	gl_FragData[0] = vec4(outCol, 0.0, colorAlbedo.a);
-	gl_FragData[1] = vec4(frag2.xyz, 1.0);
+	gl_FragData[1] = vec4(outNorm, 0.0, 1.0);
 	gl_FragData[2] = vec4(lmcoord.t, mat, lmcoord.s, 1.0);
 	gl_FragData[3] = vec4(outSpec, 0.0,1.0);
 }
