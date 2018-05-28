@@ -1,7 +1,9 @@
-# Sushi-Shader Pre 3.0
+# Sushi-Shader
 
-## Development moved to [here](https://github.com/Strum355/Sushi-Shader)
+## Restart from scratch soon™
 
+---
+## Old Readme
 
 GLSL Shader for Minecraft. Based off Robobo1221s V7 Dev3
 
